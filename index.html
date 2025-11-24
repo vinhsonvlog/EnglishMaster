@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EnglishMaster - Learn English Interactively</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <h1>📚 EnglishMaster</h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#home" class="nav-link active" data-section="home">Home</a></li>
+                <li><a href="#vocabulary" class="nav-link" data-section="vocabulary">Vocabulary</a></li>
+                <li><a href="#grammar" class="nav-link" data-section="grammar">Grammar</a></li>
+                <li><a href="#reading" class="nav-link" data-section="reading">Reading</a></li>
+                <li><a href="#progress" class="nav-link" data-section="progress">Progress</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Home Section -->
+        <section id="home" class="section active">
+            <div class="hero">
+                <h2>Welcome to EnglishMaster!</h2>
+                <p>Your comprehensive platform for mastering English</p>
+                <div class="features">
+                    <div class="feature-card">
+                        <span class="icon">📝</span>
+                        <h3>Vocabulary Builder</h3>
+                        <p>Learn new words with interactive flashcards</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="icon">📖</span>
+                        <h3>Grammar Practice</h3>
+                        <p>Master English grammar with exercises</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="icon">📚</span>
+                        <h3>Reading Comprehension</h3>
+                        <p>Improve understanding with stories</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="icon">📊</span>
+                        <h3>Track Progress</h3>
+                        <p>Monitor your learning journey</p>
+                    </div>
+                </div>
+                <button class="cta-button" onclick="navigateToSection('vocabulary')">Start Learning</button>
+            </div>
+        </section>
+
+        <!-- Vocabulary Section -->
+        <section id="vocabulary" class="section">
+            <h2>Vocabulary Builder</h2>
+            <div class="vocabulary-container">
+                <div class="flashcard-wrapper">
+                    <div class="flashcard" id="flashcard">
+                        <div class="flashcard-inner">
+                            <div class="flashcard-front">
+                                <h3 id="word"></h3>
+                                <p class="word-type" id="wordType"></p>
+                            </div>
+                            <div class="flashcard-back">
+                                <p class="definition" id="definition"></p>
+                                <p class="example" id="example"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="flip-button" onclick="flipCard()">Flip Card</button>
+                </div>
+                <div class="controls">
+                    <button class="control-button" onclick="previousCard()">← Previous</button>
+                    <span class="card-counter" id="cardCounter">1 / 10</span>
+                    <button class="control-button" onclick="nextCard()">Next →</button>
+                </div>
+                <div class="difficulty-selector">
+                    <label>Difficulty:</label>
+                    <select id="difficultySelect" onchange="changeDifficulty()">
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Grammar Section -->
+        <section id="grammar" class="section">
+            <h2>Grammar Practice</h2>
+            <div class="grammar-container">
+                <div class="quiz-box">
+                    <div class="quiz-header">
+                        <h3 id="quizTitle">Grammar Quiz</h3>
+                        <span class="quiz-score">Score: <span id="score">0</span>/<span id="totalQuestions">10</span></span>
+                    </div>
+                    <div class="question-container">
+                        <p class="question" id="question"></p>
+                        <div class="options" id="options"></div>
+                    </div>
+                    <div class="quiz-controls">
+                        <button class="control-button" onclick="checkAnswer()">Check Answer</button>
+                        <button class="control-button" onclick="nextQuestion()">Next Question</button>
+                    </div>
+                    <div class="feedback" id="feedback"></div>
+                </div>
+                <div class="grammar-topics">
+                    <h3>Topics</h3>
+                    <button class="topic-button active" onclick="selectTopic('tenses')">Tenses</button>
+                    <button class="topic-button" onclick="selectTopic('articles')">Articles</button>
+                    <button class="topic-button" onclick="selectTopic('prepositions')">Prepositions</button>
+                    <button class="topic-button" onclick="selectTopic('conditionals')">Conditionals</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reading Section -->
+        <section id="reading" class="section">
+            <h2>Reading Comprehension</h2>
+            <div class="reading-container">
+                <div class="reading-passage">
+                    <h3 id="passageTitle"></h3>
+                    <div class="passage-text" id="passageText"></div>
+                </div>
+                <div class="reading-questions">
+                    <h3>Comprehension Questions</h3>
+                    <div id="readingQuestions"></div>
+                    <button class="control-button" onclick="checkReadingAnswers()">Check Answers</button>
+                    <div class="feedback" id="readingFeedback"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Progress Section -->
+        <section id="progress" class="section">
+            <h2>Your Learning Progress</h2>
+            <div class="progress-container">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Vocabulary</h3>
+                        <p class="stat-number" id="vocabProgress">0</p>
+                        <p>Words Learned</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Grammar</h3>
+                        <p class="stat-number" id="grammarProgress">0</p>
+                        <p>Exercises Completed</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Reading</h3>
+                        <p class="stat-number" id="readingProgress">0</p>
+                        <p>Passages Read</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Overall</h3>
+                        <p class="stat-number" id="overallProgress">0%</p>
+                        <p>Completion</p>
+                    </div>
+                </div>
+                <div class="progress-bars">
+                    <div class="progress-item">
+                        <label>Vocabulary Mastery</label>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="vocabBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="progress-item">
+                        <label>Grammar Proficiency</label>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="grammarBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="progress-item">
+                        <label>Reading Skills</label>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="readingBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <button class="control-button" onclick="resetProgress()">Reset Progress</button>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 EnglishMaster. All rights reserved.</p>
+        <p>Master English through interactive learning</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
