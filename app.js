@@ -340,8 +340,10 @@ function selectTopic(topic) {
     currentTopic = topic;
     document.querySelectorAll('.topic-button').forEach(btn => {
         btn.classList.remove('active');
+        if (btn.textContent === topic.charAt(0).toUpperCase() + topic.slice(1)) {
+            btn.classList.add('active');
+        }
     });
-    event.target.classList.add('active');
     initGrammar();
 }
 
