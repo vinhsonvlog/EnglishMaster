@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:englishmaster/config/colors.dart';
 import 'package:englishmaster/services/api_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt; // ✅ Import Speech To Text
-import 'package:permission_handler/permission_handler.dart'; // ✅ Import Permission
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
 
 class LessonScreen extends StatefulWidget {
   final String lessonId;
@@ -18,11 +19,8 @@ class LessonScreen extends StatefulWidget {
 
 class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMixin {
   final ApiService _apiService = ApiService();
-
   final FlutterTts _flutterTts = FlutterTts();
   final AudioPlayer _audioPlayer = AudioPlayer();
-
-  // ✅ Khởi tạo Speech To Text
   final stt.SpeechToText _speech = stt.SpeechToText();
 
   // States
@@ -58,7 +56,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     super.initState();
     _progressController = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
     _initTts();
-    _initSpeech(); // ✅ Khởi tạo Speech
+    _initSpeech();
     _loadLessonData();
   }
 
@@ -67,7 +65,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     _progressController.dispose();
     _flutterTts.stop();
     _audioPlayer.dispose();
-    _speech.stop(); // ✅ Dừng thu âm khi thoát
+    _speech.stop();
     super.dispose();
   }
 
@@ -76,25 +74,29 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setSpeechRate(0.5);
     if (Platform.isIOS) {
-      await _flutterTts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback,
-          [
-            IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-            IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-            IosTextToSpeechAudioCategoryOptions.mixWithOthers
-          ],
-          IosTextToSpeechAudioMode.voicePrompt
-      );
+      await _flutterTts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback, [
+        IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+        IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+        IosTextToSpeechAudioCategoryOptions.mixWithOthers
+      ], IosTextToSpeechAudioMode.voicePrompt);
     }
   }
 
-  // ✅ Khởi tạo Speech To Text
   void _initSpeech() async {
     try {
       _speechAvailable = await _speech.initialize(
-        onStatus: (status) => print('Speech status: $status'),
-        onError: (errorNotification) => print('Speech error: $errorNotification'),
+        onStatus: (status) {
+          print('Speech status: $status');
+          if (status == 'done' || status == 'notListening') {
+            if (mounted) setState(() => _isListening = false);
+          }
+        },
+        onError: (errorNotification) {
+          print('Speech error: $errorNotification');
+          if (mounted) setState(() => _isListening = false);
+        },
       );
-      setState(() {});
+      if (mounted) setState(() {});
     } catch (e) {
       print("Speech init error: $e");
     }
@@ -105,41 +107,97 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   }
 
   Future<void> _playSound(bool isCorrect) async {
-    // Sửa đường dẫn asset cho đúng với project của bạn (xem lại thư mục assets)
-    final source = AssetSource(isCorrect ? 'audio/correct.mp3' : 'audio/wrong.mp3');
-    await _audioPlayer.play(source);
+    try {
+      final source = AssetSource(isCorrect ? 'audio/correct.mp3' : 'audio/wrong.mp3');
+      await _audioPlayer.play(source);
+    } catch (e) {
+      print("Audio Error: $e");
+    }
   }
 
-  // ✅ Hàm Bắt đầu/Dừng thu âm
+  // --- THUẬT TOÁN SO SÁNH CHUỖI (LEVENSHTEIN DISTANCE) ---
+  // Tính tỷ lệ giống nhau giữa 2 chuỗi (0.0 -> 1.0)
+  double _calculateSimilarity(String s1, String s2) {
+    if (s1.isEmpty) return s2.isEmpty ? 1.0 : 0.0;
+    if (s2.isEmpty) return 0.0;
+
+    s1 = s1.toLowerCase().trim();
+    s2 = s2.toLowerCase().trim();
+
+    List<int> costs = List<int>.filled(s2.length + 1, 0);
+    for (int i = 0; i <= s1.length; i++) {
+      int lastValue = i;
+      for (int j = 0; j <= s2.length; j++) {
+        if (i == 0) {
+          costs[j] = j;
+        } else {
+          if (j > 0) {
+            int newValue = costs[j - 1];
+            if (s1.codeUnitAt(i - 1) != s2.codeUnitAt(j - 1)) {
+              newValue = (newValue < lastValue ? newValue : lastValue) + 1;
+            }
+            costs[j - 1] = lastValue;
+            lastValue = newValue;
+          }
+        }
+      }
+      if (i > 0) costs[s2.length] = lastValue;
+    }
+
+    int distance = costs[s2.length];
+    int maxLength = max(s1.length, s2.length);
+    return (maxLength - distance) / maxLength;
+  }
+
+  // --- HÀM THU ÂM & TỰ ĐỘNG CHẤM ĐIỂM ---
   void _listen() async {
     if (!_speechAvailable) {
-      // Yêu cầu quyền nếu chưa có
       var status = await Permission.microphone.request();
       if (status != PermissionStatus.granted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cần quyền Micro để thu âm")));
         return;
       }
-      await _speech.initialize();
-      setState(() => _speechAvailable = true);
+      bool available = await _speech.initialize();
+      if (mounted) setState(() => _speechAvailable = available);
     }
 
-    if (!_isListening) {
+    if (_isListening) {
+      _speech.stop();
+      setState(() => _isListening = false);
+    } else {
       setState(() {
         _isListening = true;
         _spokenText = "";
       });
+
       _speech.listen(
-        onResult: (val) => setState(() {
-          _spokenText = val.recognizedWords;
-        }),
+        onResult: (val) {
+          setState(() {
+            _spokenText = val.recognizedWords;
+          });
+
+          // ✅ TỰ ĐỘNG CHẤM KHI NGỪNG NÓI (finalResult = true)
+          if (val.finalResult) {
+            // Delay 0.5s để cập nhật UI rồi chấm
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (!_isChecked && _isListening) {
+                _speech.stop();
+                setState(() => _isListening = false);
+                _handleCheck(); // Gọi hàm kiểm tra ngay lập tức
+              }
+            });
+          }
+        },
         localeId: 'en_US',
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 2), // Ngừng nói 2 giây là chốt đơn
+        partialResults: true,
+        cancelOnError: true,
       );
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
     }
   }
 
+  // --- LOAD DATA ---
   void _loadLessonData() async {
     try {
       final results = await Future.wait([
@@ -152,7 +210,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       final exercises = results[2] as List<dynamic>;
       List<dynamic> transformedQuestions = [];
 
-      // 1. Vocab
+      // 1. Vocabularies
       for (var vocab in vocabularies) {
         final otherVocabs = vocabularies.where((v) => v['_id'] != vocab['_id']).toList()..shuffle();
         final wrongChoices = otherVocabs.take(2).toList();
@@ -174,13 +232,12 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       for (var exercise in exercises) {
         String type = exercise['type'];
         String questionType = 'multiple_choice';
-
         if (type == 'multiple-choice') questionType = 'multiple_choice';
         else if (type == 'fill-in-blank') questionType = 'fill_in_blank';
         else if (type == 'translation') questionType = 'translate_build';
         else if (type == 'listening') questionType = 'listen_write';
         else if (type == 'matching') questionType = 'match_pairs';
-        else if (type == 'speaking') questionType = 'speaking'; // ✅ Thêm Speaking
+        else if (type == 'speaking') questionType = 'speaking';
 
         Map<String, dynamic> q = {
           'id': 'ex-${exercise['_id']}',
@@ -197,27 +254,22 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             List<Map<String, String>> right = [];
             int idx = 0;
             pairs.forEach((key, value) {
-              String leftId = 'l$idx';
-              String rightId = 'r$idx';
+              String leftId = 'l$idx'; String rightId = 'r$idx';
               left.add({'id': leftId, 'text': key});
               right.add({'id': rightId, 'text': value, 'matchWith': leftId});
               idx++;
             });
             right.shuffle();
-            q['leftColumn'] = left;
-            q['rightColumn'] = right;
+            q['leftColumn'] = left; q['rightColumn'] = right;
           } catch (e) { continue; }
-        }
-        else if (questionType == 'translate_build') {
+        } else if (questionType == 'translate_build') {
           String answer = exercise['correctAnswer'].toString();
           List<String> words = answer.split(' ');
-          words.add("is"); words.add("the");
-          words.shuffle();
+          words.add("is"); words.add("the"); words.shuffle();
           q['correctAnswer'] = answer.split(' ');
           q['wordBank'] = words;
           q['audioText'] = answer;
-        }
-        else if (questionType == 'multiple_choice') {
+        } else if (questionType == 'multiple_choice') {
           if (exercise['options'] != null) {
             q['choices'] = (exercise['options'] as List).map((opt) {
               return {'id': opt['_id'] ?? opt['text'], 'text': opt['text'], 'image': ''};
@@ -270,16 +322,21 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     } else if (type == 'listen_write' || type == 'fill_in_blank') {
       correct = _inputValue.trim().toLowerCase() == q['correctAnswer'].toString().toLowerCase();
     } else if (type == 'speaking') {
-      // ✅ Logic chấm điểm Speaking
-      // Chuẩn hóa chuỗi: bỏ dấu câu, lowercase
-      String target = q['correctAnswer'].toString().toLowerCase().replaceAll(RegExp(r'[^\w\s]+'), '');
-      String spoken = _spokenText.toLowerCase().replaceAll(RegExp(r'[^\w\s]+'), '');
+      // ✅ Logic chấm điểm mới: Chấp nhận sai số 50%
+      String target = q['correctAnswer'].toString();
+      String spoken = _spokenText;
 
-      // Đúng nếu chuỗi nói chứa từ khóa hoặc giống > 80%
-      correct = spoken == target || spoken.contains(target);
+      // Tính độ tương đồng (0.0 -> 1.0)
+      double similarity = _calculateSimilarity(spoken, target);
 
-      // Debug
-      print("Target: $target | Spoken: $spoken | Correct: $correct");
+      // Nếu giống trên 50% (0.5) là OK
+      correct = similarity >= 0.5;
+
+      if (_spokenText.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chưa nhận diện được giọng nói!")));
+        return;
+      }
+      print("Target: $target | Spoken: $spoken | Score: ${similarity * 100}%");
     }
 
     setState(() {
@@ -305,12 +362,11 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         _selectedLeft = null;
         _selectedRight = null;
         _matchedPairs = [];
-        _spokenText = ""; // ✅ Reset giọng nói
+        _spokenText = "";
         _updateProgress();
       });
 
       final nextQ = _questions[_currentIndex];
-      // Tự động đọc nếu là câu hỏi nghe
       if ((nextQ['type'] == 'listen_write' || nextQ['type'] == 'speaking') && nextQ['audioText'] != null) {
         Future.delayed(const Duration(milliseconds: 500), () => _speak(nextQ['audioText']));
       }
@@ -401,7 +457,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                 children: [
                   const Text("CÂU HỎI", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 16),
-                  // Header câu hỏi (Chỉ hiện nếu KHÔNG phải là Speaking)
                   if (q['type'] != 'speaking')
                     Row(
                       children: [
@@ -460,13 +515,13 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       case 'fill_in_blank':
         return _buildTextInputQuestion(q);
       case 'speaking':
-        return _buildSpeakingQuestion(q); // ✅ Widget Speaking mới
+        return _buildSpeakingQuestion(q);
       default:
         return Text("Dạng câu hỏi: ${q['type']} chưa hỗ trợ hiển thị");
     }
   }
 
-  // ✅ WIDGET SPEAKING: Giống Web
+  // WIDGET SPEAKING
   Widget _buildSpeakingQuestion(dynamic q) {
     return Center(
       child: Column(
@@ -475,7 +530,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
           const Text("Nói câu này:", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey)),
           const SizedBox(height: 16),
 
-          // Hiển thị câu cần nói
           Text(
             q['correctAnswer'] ?? q['question'],
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -483,7 +537,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
           ),
           const SizedBox(height: 30),
 
-          // Nút nghe mẫu (To tròn)
           GestureDetector(
             onTap: () => _speak(q['correctAnswer'] ?? q['question']),
             child: Container(
@@ -498,12 +551,11 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
           ),
           const SizedBox(height: 40),
 
-          // Nút Mic Thu Âm
           if (!_isChecked)
             Column(
               children: [
                 GestureDetector(
-                  onTap: _listen,
+                  onTap: _listen, // Bấm để bắt đầu nói và tự chấm
                   child: Container(
                     width: 80, height: 80,
                     decoration: BoxDecoration(
@@ -519,17 +571,12 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
               ],
             ),
 
-          // Hiển thị kết quả người dùng nói
           if (_spokenText.isNotEmpty)
             Container(
               margin: const EdgeInsets.only(top: 20),
               padding: const EdgeInsets.all(16),
               width: double.infinity,
-              decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!)
-              ),
+              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[300]!)),
               child: Column(
                 children: [
                   const Text("Bạn đã nói:", style: TextStyle(color: Colors.grey, fontSize: 12)),
@@ -543,7 +590,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     );
   }
 
-  // ... (Các widget Vocabulary, Translate, MatchPairs, TextInput giữ nguyên)
+  // ... Các widget khác giữ nguyên
   Widget _buildVocabularyQuestion(dynamic q) {
     return GridView.count(
       crossAxisCount: 2,
@@ -656,7 +703,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         children: [
           if (_showFeedback) ...[
             Row(children: [Icon(_isCorrect ? Icons.check_circle : Icons.cancel, color: titleColor, size: 30), const SizedBox(width: 10), Text(_isCorrect ? "Chính xác!" : "Chưa đúng!", style: TextStyle(color: titleColor, fontSize: 20, fontWeight: FontWeight.bold))]),
-            if (!_isCorrect) Padding(padding: const EdgeInsets.only(top: 8.0), child: Text("Đáp án đúng: ${q['correctAnswer']}", style: const TextStyle(color: Color(0xFFEA2B2B), fontSize: 16))),
+            if (!_isCorrect && q['correctAnswer'] is String) Padding(padding: const EdgeInsets.only(top: 8.0), child: Text("Đáp án đúng: ${q['correctAnswer']}", style: const TextStyle(color: Color(0xFFEA2B2B), fontSize: 16))),
             const SizedBox(height: 16),
           ],
           SizedBox(

@@ -1,7 +1,8 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:englishmaster/config/colors.dart';
 import 'package:englishmaster/services/api_service.dart';
-import 'package:englishmaster/screens/lesson/quiz_screen.dart'; // Nhớ import file mới tạo
+import 'package:englishmaster/screens/lesson/quiz_screen.dart';
 
 class FlashcardsScreen extends StatefulWidget {
   const FlashcardsScreen({super.key});
@@ -14,67 +15,126 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
   final ApiService _apiService = ApiService();
   late Future<List<dynamic>> _decksFuture;
 
+  List<dynamic> _allDecks = [];
+  List<dynamic> _filteredDecks = [];
+  final TextEditingController _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
-    _decksFuture = _apiService.getDecks();
+    _loadDecks();
+  }
+
+  void _loadDecks() {
+    setState(() {
+      _decksFuture = _apiService.getDecks().then((data) {
+        _allDecks = data;
+        _filteredDecks = data;
+        return data;
+      });
+    });
+  }
+
+  void _filterDecks(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredDecks = _allDecks;
+      } else {
+        _filteredDecks = _allDecks.where((deck) {
+          final title = (deck['title'] ?? '').toString().toLowerCase();
+          return title.contains(query.toLowerCase());
+        }).toList();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kho từ vựng', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-      ),
+      backgroundColor: Colors.grey[50],
       body: FutureBuilder<List<dynamic>>(
         future: _decksFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
           } else if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text('Lỗi tải dữ liệu: ${snapshot.error}'),
-                  TextButton(onPressed: () {
-                    setState(() { _decksFuture = _apiService.getDecks(); });
-                  }, child: const Text("Thử lại"))
-                ],
-              ),
-            );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildEmptyState();
+            return _buildErrorState(snapshot.error.toString());
           }
 
-          final decks = snapshot.data!;
-
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.85, // Thẻ cao hơn một chút để chứa nút bấm
-            ),
-            itemCount: decks.length,
-            itemBuilder: (context, index) {
-              return _buildDeckCard(decks[index]);
-            },
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              _buildSliverAppBar(),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _filterDecks,
+                    decoration: InputDecoration(
+                      hintText: "Tìm kiếm chủ đề...",
+                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide(color: Colors.grey.shade200),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: const BorderSide(color: AppColors.primary),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (_filteredDecks.isEmpty)
+                SliverFillRemaining(child: _buildEmptyState())
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.all(16),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: 0.8,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                        return _buildModernDeckCard(_filteredDecks[index], index);
+                      },
+                      childCount: _filteredDecks.length,
+                    ),
+                  ),
+                ),
+            ],
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Mở màn hình tạo bộ thẻ mới
-        },
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add, color: Colors.white),
+    );
+  }
+
+  Widget _buildSliverAppBar() {
+    return SliverAppBar(
+      expandedHeight: 100.0,
+      floating: true,
+      pinned: true,
+      backgroundColor: Colors.white,
+      elevation: 0,
+      surfaceTintColor: Colors.white,
+      flexibleSpace: FlexibleSpaceBar(
+        centerTitle: false,
+        titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+        title: const Text(
+          'Kho Từ Vựng',
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 20),
+        ),
       ),
     );
   }
@@ -84,73 +144,121 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.style_outlined, size: 80, color: Colors.grey),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.layers_clear_outlined, size: 60, color: Colors.blue.shade300),
+          ),
           const SizedBox(height: 16),
-          const Text("Bạn chưa có bộ thẻ nào", style: TextStyle(color: Colors.grey, fontSize: 16)),
+          const Text(
+            "Không tìm thấy bộ thẻ nào",
+            style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.w600),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDeckCard(dynamic deck) {
-    // Random màu cho đẹp nếu backend không trả về màu
-    final List<Color> cardColors = [Colors.blue, Colors.orange, Colors.green, Colors.purple, Colors.teal];
-    final color = cardColors[deck['title'].hashCode % cardColors.length];
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 60, color: Colors.red),
+            const SizedBox(height: 16),
+            Text("Lỗi: $error", textAlign: TextAlign.center),
+            TextButton(onPressed: _loadDecks, child: const Text("Thử lại"))
+          ],
+        ),
+      ),
+    );
+  }
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () {
-          // TODO: Điều hướng vào xem chi tiết flashcard
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => QuizScreen(
-                deckId: deck['_id'] ?? 'default_id', // Lấy ID từ MongoDB
-                deckTitle: deck['title'] ?? 'Flashcards',
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              colors: [color.withOpacity(0.7), color],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.style, color: Colors.white, size: 32),
-              const Spacer(),
-              Text(
-                deck['title'] ?? 'Không tên',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${deck['flashcardCount'] ?? 0} thẻ',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              const SizedBox(height: 8),
-              // Nút học nhanh
-              Align(
-                alignment: Alignment.bottomRight,
-                child: CircleAvatar(
-                  backgroundColor: Colors.white24,
-                  radius: 16,
-                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
+  Widget _buildModernDeckCard(dynamic deck, int index) {
+    final int hash = deck['_id'].toString().hashCode;
+    final List<Color> accentColors = [
+      const Color(0xFF6C63FF), const Color(0xFFFF6584),
+      const Color(0xFF38B6FF), const Color(0xFFFFBC2F), const Color(0xFF00D2BA),
+    ];
+    final Color themeColor = accentColors[hash.abs() % accentColors.length];
+    final int totalCards = deck['totalCards'] ?? 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            // === LOGIC KIỂM TRA 0 THẺ TẠI ĐÂY ===
+            if (totalCards == 0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text('Bộ thẻ này chưa có từ vựng nào!'),
+                    ],
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: Colors.orange.shade400,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  duration: const Duration(seconds: 2),
                 ),
-              )
-            ],
+              );
+              return;
+            }
+            // =====================================
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => QuizScreen(
+                  deckId: deck['_id'] ?? '',
+                  deckTitle: deck['title'] ?? 'Flashcards',
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: themeColor.withOpacity(0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.school_rounded, color: themeColor, size: 20),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  deck['title'] ?? 'Chưa đặt tên',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, height: 1.2),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Spacer(),
+                Row(
+                  children: [
+                    Icon(Icons.style, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Text('$totalCards thẻ', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

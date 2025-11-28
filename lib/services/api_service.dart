@@ -7,8 +7,10 @@ class ApiService {
   // - Máy ảo Android (Emulator): dùng 'http://10.0.2.2:1124/api'
   // - Máy ảo iOS (Simulator): dùng 'http://localhost:1124/api'
   // - Điện thoại thật: dùng IP máy tính của bạn, ví dụ 'http://192.168.1.x:1124/api'
-  static const String baseUrl = 'http://localhost:1124/api';
-  //static const String baseUrl = 'http://10.0.2.2:1124/api';
+  // - Máy thật: dùng IP máy tính của bạn, ví dụ 'http://192.168.2.99:1124/api:
+
+  //static const String baseUrl = 'http://localhost:1124/api';
+  static const String baseUrl = 'http://10.0.2.2:1124/api';
   Future<Map<String, String>> _getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
@@ -17,6 +19,7 @@ class ApiService {
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
+
 
   // --- AUTHENTICATION ---
 
@@ -102,21 +105,49 @@ class ApiService {
   }
   // --- FLASHCARDS (DECKS) ---
 
-  // Lấy danh sách các bộ thẻ
+  // 1. Lấy danh sách bộ thẻ (Decks)
   Future<List<dynamic>> getDecks() async {
     final headers = await _getHeaders();
-    // Endpoint dự đoán dựa trên backend của bạn: /decks
-    final response = await http.get(Uri.parse('$baseUrl/decks'), headers: headers);
+
+    // SỬA LỖI: Dùng endpoint /browse cho user thường
+    final response = await http.get(Uri.parse('$baseUrl/decks/browse'), headers: headers);
 
     if (response.statusCode == 200) {
-      return List<dynamic>.from(jsonDecode(response.body));
+      final json = jsonDecode(response.body);
+      // Backend trả về { data: { decks: [] } }
+      if (json['data'] != null && json['data']['decks'] != null) {
+        return List<dynamic>.from(json['data']['decks']);
+      }
+      return [];
     } else {
-      // Nếu chưa có API /decks, trả về danh sách rỗng để không crash app
       print('Lỗi tải decks: ${response.body}');
       return [];
     }
   }
 
+  // --- FLASHCARD DETAIL ---
+
+  // 2. Lấy chi tiết thẻ trong một bộ (Flashcards)
+  Future<List<Flashcard>> getFlashcardsByDeck(String deckId) async {
+    final headers = await _getHeaders();
+
+    // SỬA LỖI: Gọi đúng route backend
+    final response = await http.get(
+        Uri.parse('$baseUrl/decks/$deckId/flashcards'),
+        headers: headers
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json['data'] != null && json['data']['flashcards'] != null) {
+        final List<dynamic> list = json['data']['flashcards'];
+        return list.map((item) => Flashcard.fromJson(item)).toList();
+      }
+      return [];
+    } else {
+      throw Exception('Không thể tải thẻ: ${response.statusCode}');
+    }
+  }
   // --- USER PROFILE ---
 
   // Lấy thông tin chi tiết người dùng (để hiển thị Avatar, XP, Streak)
@@ -131,26 +162,7 @@ class ApiService {
       throw Exception('Không thể tải thông tin người dùng');
     }
   }
-  // --- FLASHCARD DETAIL ---
 
-  // Lấy danh sách thẻ trong một bộ (Deck)
-  // Backend của bạn có thể là: GET /flashcards/deck/:deckId
-  Future<List<Flashcard>> getFlashcardsByDeck(String deckId) async {
-    final headers = await _getHeaders();
-    // Lưu ý: Đảm bảo backend bạn có route này.
-    // Nếu backend bạn dùng query param thì sửa thành: Uri.parse('$baseUrl/flashcards?deckId=$deckId')
-    final response = await http.get(
-        Uri.parse('$baseUrl/flashcards/deck/$deckId'),
-        headers: headers
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> body = jsonDecode(response.body);
-      return body.map((json) => Flashcard.fromJson(json)).toList();
-    } else {
-      throw Exception('Không thể tải danh sách thẻ');
-    }
-  }
   // --- LESSON DETAILS ---
 
   // Lấy chi tiết 1 bài học

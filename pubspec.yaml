@@ -38,6 +38,7 @@ dependencies:
   audioplayers: ^5.2.1   # For playing audio files
   speech_to_text: ^7.0.0
   permission_handler: ^11.0.1
+  video_player: ^2.10.0
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
