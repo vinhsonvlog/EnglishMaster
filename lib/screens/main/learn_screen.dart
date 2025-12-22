@@ -1,24 +1,43 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:englishmaster/services/api_service.dart';
-// ✅ SỬA 1: Import màn hình bài học chi tiết
 import 'package:englishmaster/screens/lesson/lesson_screen.dart';
 
 // Enum trạng thái bài học
 enum LessonStatus { locked, unlocked, current, completed }
 
-// Bảng màu giao diện
-class _AppColors {
-  static const Color green = Color(0xFF58CC02);
-  static const Color greenShadow = Color(0xFF46A302);
+class _LearnStyles {
+  // --- COLORS (Giống Learn.jsx) ---
+  static const Color unit1Color = Color(0xFF58CC02);
+  static const Color unit1Shadow = Color(0xFF46A302);
+
+  static const Color lockedGray = Color(0xFFE5E5E5);
+  static const Color lockedShadow = Color(0xFFC7C7C7); // Màu shadow cho nút khóa
+  static const Color lockedIcon = Color(0xFFAFAFAF);
+
   static const Color gold = Color(0xFFFFD700);
   static const Color goldShadow = Color(0xFFCC8800);
-  static const Color grey = Color(0xFFE5E5E5);
-  static const Color greyShadow = Color(0xFFAFAFAF);
-  static const Color lockedIcon = Color(0xFFAFAFAF);
-  static const Color white = Colors.white;
-  static const Color black = Color(0xFF4B4B4B);
+
   static const Color background = Colors.white;
+
+  // --- GRADIENTS (Giống CSS linear-gradient) ---
+  static const LinearGradient unit1Gradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF58CC02), Color(0xFF46A302)],
+  );
+
+  static const LinearGradient goldGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+  );
+
+  static const LinearGradient lockedGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFE5E5E5), Color(0xFFD1D5DB)],
+  );
 }
 
 class LearnScreen extends StatefulWidget {
@@ -28,113 +47,168 @@ class LearnScreen extends StatefulWidget {
   State<LearnScreen> createState() => _LearnScreenState();
 }
 
-class _LearnScreenState extends State<LearnScreen> with SingleTickerProviderStateMixin {
+class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin {
   final ApiService _apiService = ApiService();
-
-  // Tạo ScrollController riêng để tránh lỗi xung đột cuộn
-  final ScrollController _scrollController = ScrollController();
-
-  late Future<List<dynamic>> _lessonsFuture;
-
-  // Animation cho hiệu ứng "nhịp tim" của bài đang học
-  late AnimationController _animController;
+  late AnimationController _pulseController;
   late Animation<double> _scaleAnim;
+
+  bool _isLoading = true;
+
+  // Dữ liệu
+  List<Map<String, dynamic>> _units = [];
+  Map<String, dynamic> _userProgress = {};
+  Map<String, dynamic> _userProfile = {};
+  String? _calculatedCurrentLessonId;
 
   @override
   void initState() {
     super.initState();
-    _lessonsFuture = _apiService.getLessons();
-
-    _animController = AnimationController(
+    // Animation nhịp tim cho bài hiện tại
+    _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true); // Lặp lại liên tục
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
 
     _scaleAnim = Tween<double>(begin: 1.0, end: 1.05).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
+    _fetchData();
   }
 
   @override
   void dispose() {
-    _animController.dispose();
-    _scrollController.dispose();
+    _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    try {
+      final results = await Future.wait([
+        _apiService.getLessons(),      // [0]
+        _apiService.getUserProgress(), // [1]
+        _apiService.getUserProfile(),  // [2]
+      ]);
+
+      if (!mounted) return;
+
+      var rawLessons = results[0] as List<dynamic>;
+      var progress = results[1] as Map<String, dynamic>;
+      var profile = (results[2] as Map<String, dynamic>)['data'] ?? results[2];
+
+      // 1. Sắp xếp tất cả bài học trước
+      rawLessons.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
+
+      // 2. LỌC DỮ LIỆU: Chỉ lấy Lesson của Unit 1 (Bỏ .take(3) để lấy hết)
+      var filteredLessons = rawLessons.where((lesson) {
+        String unitTitle = "";
+        if (lesson['unit'] != null && lesson['unit'] is Map) {
+          unitTitle = lesson['unit']['title']?.toString() ?? "";
+        } else {
+          unitTitle = "Unit ${lesson['unit'] ?? 1}";
+        }
+        return unitTitle.contains("1");
+      }).toList();
+
+      // 3. Xác định Current Lesson ID (Logic giống React)
+      List<dynamic> completedIds = progress['completedLessons'] ?? [];
+      String? currentId = progress['currentLesson'];
+
+      // Nếu backend chưa trả về currentLesson, tìm bài đầu tiên chưa học trong Unit 1
+      if (currentId == null || currentId.isEmpty) {
+        for (var lesson in filteredLessons) {
+          if (!completedIds.contains(lesson['_id'])) {
+            currentId = lesson['_id'];
+            break;
+          }
+        }
+        // Nếu đã học hết unit 1, có thể currentId sẽ null (hoặc bài cuối)
+      }
+
+      // 4. Tạo Object Unit 1 duy nhất
+      Map<String, dynamic> unit1 = {
+        'id': 'unit1',
+        'title': 'Unit 1',
+        'description': 'Cơ bản',
+        'order': 1,
+        'lessons': filteredLessons,
+        'color': _LearnStyles.unit1Color,
+        'shadowColor': _LearnStyles.unit1Shadow,
+      };
+
+      setState(() {
+        _units = [unit1]; // Chỉ hiển thị 1 Unit
+        _userProgress = progress;
+        _userProfile = profile;
+        _calculatedCurrentLessonId = currentId;
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      print("Lỗi tải dữ liệu LearnScreen: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Map icon theo type (Giống React)
+  Widget _getLessonIcon(String type, Color color, double size) {
+    IconData iconData;
+    switch (type) {
+      case 'grammar': iconData = Icons.star; break; // Star
+      case 'practice': iconData = Icons.fitness_center; break; // FitnessCenter
+      case 'story': iconData = Icons.menu_book; break; // MenuBook
+      case 'conversation': iconData = Icons.chat; break; // Chat
+      case 'trophy': iconData = Icons.emoji_events; break; // EmojiEvents
+      case 'vocabulary':
+      default: iconData = Icons.local_library; // LocalLibrary
+    }
+    return Icon(iconData, color: color, size: size);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(backgroundColor: Colors.white, body: Center(child: CircularProgressIndicator()));
+    }
+
+    // Stats an toàn
+    final streak = (_userProfile['streak'] is Map) ? _userProfile['streak']['count'] : (_userProfile['streak'] ?? 0);
+    final gems = _userProfile['gems'] ?? _userProfile['gem'] ?? 0;
+    final xp = _userProfile['xp'] ?? 0;
+
     return Scaffold(
-      backgroundColor: _AppColors.background,
-      appBar: _buildAppBar(),
-      body: FutureBuilder<List<dynamic>>(
-        future: _lessonsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Lỗi kết nối: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('Chưa có bài học nào.'));
-          }
-
-          // 1. Lấy dữ liệu gốc
-          final allLessons = snapshot.data!;
-
-          // 2. Sắp xếp theo thứ tự (order)
-          allLessons.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
-
-          // 3. LỌC DỮ LIỆU
-          final unit1Lessons = allLessons.where((lesson) {
-            final unitTitle = lesson['unit'] is Map ? lesson['unit']['title'] : '';
-            return unitTitle.toString().contains("1") || unitTitle.toString().toLowerCase().contains("unit 1");
-          }).toList();
-
-          final displayLessons = unit1Lessons.isNotEmpty ? unit1Lessons : allLessons.take(10).toList();
-
-          // Tách logic lấy tên Unit ra ngoài để an toàn hơn
-          String currentUnitTitle = "Unit 1";
-          if (displayLessons.isNotEmpty) {
-            final firstLesson = displayLessons[0];
-            if (firstLesson['unit'] != null && firstLesson['unit'] is Map) {
-              currentUnitTitle = firstLesson['unit']['title'] ?? "Unit 1";
-            }
-          }
-
-          final completedCount = 2;
-          final currentIdx = 2;
-
-          return SingleChildScrollView(
-            controller: _scrollController,
-            padding: const EdgeInsets.only(bottom: 100),
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                _buildUnitHeader(currentUnitTitle),
-                const SizedBox(height: 30),
-
-                _buildLessonPath(displayLessons, completedCount, currentIdx),
-              ],
-            ),
-          );
-        },
+      backgroundColor: _LearnStyles.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Cờ (Dùng ảnh asset hoặc icon fallback)
+            Image.asset('assets/images/US.png', width: 32, errorBuilder: (c,e,s) => const Icon(Icons.flag, color: Colors.grey)),
+            _buildStatItem(Icons.local_fire_department, Colors.orange, "$streak"),
+            _buildStatItem(Icons.diamond, Colors.blue, "$gems"),
+            _buildStatItem(Icons.flash_on, Colors.amber, "$xp"),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(2),
+          child: Container(color: Colors.grey[200], height: 2),
+        ),
       ),
-    );
-  }
-
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: _AppColors.background,
-      elevation: 0,
-      automaticallyImplyLeading: false,
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Icon(Icons.flag_circle, color: Colors.grey, size: 36),
-          _buildStatItem(Icons.local_fire_department, Colors.orange, "3"),
-          _buildStatItem(Icons.diamond, Colors.blue, "450"),
-          _buildStatItem(Icons.favorite, Colors.red, "5"),
-        ],
+      body: RefreshIndicator(
+        onRefresh: _fetchData,
+        child: _units.isEmpty
+            ? const Center(child: Text("Không tìm thấy bài học Unit 1.", style: TextStyle(color: Colors.grey)))
+            : ListView.builder(
+          padding: const EdgeInsets.only(bottom: 100),
+          itemCount: _units.length,
+          itemBuilder: (context, index) {
+            return _buildUnitSection(_units[index]);
+          },
+        ),
       ),
     );
   }
@@ -143,86 +217,122 @@ class _LearnScreenState extends State<LearnScreen> with SingleTickerProviderStat
     return Row(
       children: [
         Icon(icon, color: color, size: 26),
-        const SizedBox(width: 6),
-        Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 16)),
       ],
     );
   }
 
-  Widget _buildUnitHeader(String unitTitle) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _AppColors.green,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(color: _AppColors.greenShadow, offset: Offset(0, 4))
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(unitTitle.toUpperCase(), style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 6),
-                const Text("Cơ bản về Tiếng Anh", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
-              ],
-            ),
+  Widget _buildUnitSection(Map<String, dynamic> unit) {
+    return Column(
+      children: [
+        // Unit Header (Xanh lá giống React)
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: unit['color'],
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: unit['shadowColor'], offset: const Offset(0, 4))],
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: _AppColors.greenShadow,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white30, width: 2),
-            ),
-            child: const Icon(Icons.menu_book, color: Colors.white),
-          )
-        ],
-      ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        "PHẦN ${unit['order']}, CỬA 1-10",
+                        style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1.0)
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                        unit['description'],
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)
+                    ),
+                  ],
+                ),
+              ),
+              // Nút Hướng Dẫn
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white, width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.2)
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.menu_book, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text("HƯỚNG DẪN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              )
+            ],
+          ),
+        ),
+
+        // Intro text
+        Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Text(
+            "Hãy bắt đầu với những từ và cụm từ đơn giản!",
+            style: TextStyle(color: Colors.grey[600], fontSize: 15),
+          ),
+        ),
+
+        // Lesson Map (Con đường bài học)
+        _buildLessonMap(unit['lessons']),
+      ],
     );
   }
 
-  Widget _buildLessonPath(List<dynamic> lessons, int completedCount, int currentIdx) {
-    const double nodeHeight = 110.0;
+  Widget _buildLessonMap(List<dynamic> lessons) {
+    const double rowHeight = 130.0;
 
     return SizedBox(
-      height: lessons.length * nodeHeight + 50,
+      height: lessons.length * rowHeight + 50,
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
+          // Vẽ đường nối
           Positioned.fill(
             child: CustomPaint(
               painter: PathPainter(
                 itemCount: lessons.length,
-                rowHeight: nodeHeight,
+                rowHeight: rowHeight,
                 offsetX: 70.0,
               ),
             ),
           ),
-
+          // Vẽ các nút bài học
           ...List.generate(lessons.length, (index) {
             final lesson = lessons[index];
+            final completedIds = _userProgress['completedLessons'] ?? [];
+            final bool isCompleted = completedIds.contains(lesson['_id']);
+            final bool isCurrent = lesson['_id'] == _calculatedCurrentLessonId;
 
-            LessonStatus status = LessonStatus.locked;
-            if (index < completedCount) status = LessonStatus.completed;
-            else if (index == currentIdx) status = LessonStatus.current;
-            else if (index == completedCount && currentIdx == -1) status = LessonStatus.unlocked;
+            // Logic khóa: Mở nếu bài trước đã xong HOẶC là bài hiện tại. Bài 0 luôn mở.
+            bool isLocked = false;
+            if (index > 0) {
+              final prevLesson = lessons[index - 1];
+              final isPrevCompleted = completedIds.contains(prevLesson['_id']);
+              isLocked = !isPrevCompleted && !isCurrent && !isCompleted;
+            }
 
-            final double offsetX = 70.0;
-            double dx = sin(index * pi / 2) * offsetX;
+            // Vị trí hình Sin
+            final double offsetX = 70.0 * sin(index * pi / 2);
 
             return Positioned(
-              top: index * nodeHeight,
+              top: index * rowHeight,
               left: 0,
               right: 0,
-              child: Center(
-                child: Transform.translate(
-                  offset: Offset(dx, 0),
-                  child: _buildLessonNode(lesson, status),
+              child: Transform.translate(
+                offset: Offset(offsetX, 0),
+                child: Center(
+                  child: _buildLessonNode(lesson, isCompleted, isCurrent, isLocked, index % 2 == 0),
                 ),
               ),
             );
@@ -232,104 +342,131 @@ class _LearnScreenState extends State<LearnScreen> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildLessonNode(dynamic lesson, LessonStatus status) {
-    Color bgColor;
-    Color shadowColor;
+  Widget _buildLessonNode(Map<String, dynamic> lesson, bool isCompleted, bool isCurrent, bool isLocked, bool isLeft) {
+    Gradient bgGradient = _LearnStyles.lockedGradient;
+    Color shadowColor = _LearnStyles.lockedShadow;
+    Color iconColor = _LearnStyles.lockedIcon;
     double size = 70;
-    Widget icon;
-    bool showCrown = false;
 
-    switch (status) {
-      case LessonStatus.completed:
-        bgColor = _AppColors.gold;
-        shadowColor = _AppColors.goldShadow;
-        icon = const Icon(Icons.check, size: 35, color: Colors.white);
-        showCrown = true;
-        break;
-      case LessonStatus.current:
-      case LessonStatus.unlocked:
-        bgColor = _AppColors.green;
-        shadowColor = _AppColors.greenShadow;
-        icon = const Icon(Icons.star, size: 35, color: Colors.white);
-        break;
-      case LessonStatus.locked:
-      default:
-        bgColor = _AppColors.grey;
-        shadowColor = _AppColors.greyShadow;
-        icon = const Icon(Icons.lock, size: 30, color: _AppColors.lockedIcon);
-        break;
+    // Xác định màu sắc dựa trên trạng thái
+    if (isCompleted) {
+      bgGradient = _LearnStyles.goldGradient;
+      shadowColor = _LearnStyles.goldShadow;
+      iconColor = Colors.white;
+    } else if (isCurrent) {
+      bgGradient = _LearnStyles.unit1Gradient;
+      shadowColor = _LearnStyles.unit1Shadow;
+      iconColor = Colors.white;
     }
 
     Widget button = GestureDetector(
       onTap: () {
-        if (status != LessonStatus.locked) {
-          // ✅ SỬA 2: Điều hướng sang LessonScreen (Màn hình làm bài tập)
-          Navigator.push(context, MaterialPageRoute(
-              builder: (context) => LessonScreen(
-                lessonId: lesson['_id'] ?? 'default',
-              )
-          ));
-        } else {
+        if (isLocked) {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Hoàn thành bài trước để mở khóa!"), duration: Duration(seconds: 1))
+            const SnackBar(content: Text("Hoàn thành bài học trước để mở khóa!"), duration: Duration(seconds: 1)),
           );
+        } else {
+          Navigator.push(context, MaterialPageRoute(
+              builder: (context) => LessonScreen(lessonId: lesson['_id'])
+          )).then((_) => _fetchData());
         }
       },
       child: Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: bgColor,
+          gradient: bgGradient, // Dùng Gradient để giống nút 3D
           shape: BoxShape.circle,
-          border: status == LessonStatus.current
-              ? Border.all(color: Colors.white, width: 4)
-              : null,
+          border: isCurrent ? Border.all(color: Colors.white, width: 4) : null,
           boxShadow: [
-            BoxShadow(color: shadowColor, offset: const Offset(0, 6), blurRadius: 0),
-            if (status == LessonStatus.current)
-              BoxShadow(color: _AppColors.green.withOpacity(0.4), blurRadius: 20, spreadRadius: 5)
+            BoxShadow(
+                color: shadowColor,
+                offset: const Offset(0, 6), // Đổ bóng xuống dưới
+                blurRadius: 0 // Bóng cứng (không mờ) để tạo hiệu ứng 3D
+            ),
+            if (isCurrent)
+              BoxShadow(
+                  color: _LearnStyles.unit1Color.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2
+              )
           ],
         ),
-        child: Center(child: icon),
+        child: Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              _getLessonIcon(lesson['type'] ?? 'lesson', iconColor, 32),
+
+              // Ngôi sao vàng nhỏ khi hoàn thành
+              if (isCompleted)
+                Positioned(
+                  right: 10,
+                  bottom: 5,
+                  child: Container(
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const Icon(Icons.check, color: Colors.orange, size: 14)
+                  ),
+                )
+            ],
+          ),
+        ),
       ),
     );
 
-    if (status == LessonStatus.current) {
+    // Hiệu ứng nhịp tim
+    if (isCurrent) {
       button = ScaleTransition(scale: _scaleAnim, child: button);
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
       children: [
-        if (showCrown)
-          Transform.translate(
-            offset: const Offset(20, 10),
-            child: const Icon(Icons.emoji_events, color: Colors.orange, size: 24),
-          ),
-
-        if (status == LessonStatus.current)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: _AppColors.grey),
-              borderRadius: BorderRadius.circular(12),
+        // Linh thú Tini (Chỉ hiện ở bài đang học)
+        if (isCurrent)
+          Positioned(
+            left: isLeft ? 100 : null,
+            right: isLeft ? null : 100,
+            bottom: 25,
+            child: Image.asset(
+              'assets/images/LinhThuTini.gif',
+              width: 90,
+              height: 90,
+              fit: BoxFit.contain,
+              errorBuilder: (c,e,s)=>const SizedBox(),
             ),
-            child: const Text("BẮT ĐẦU!", style: TextStyle(color: _AppColors.green, fontWeight: FontWeight.bold, fontSize: 12)),
           ),
 
-        button,
+        Column(
+          children: [
+            // Bong bóng "Bắt đầu"
+            if (isCurrent)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _LearnStyles.unit1Shadow),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0,2), blurRadius: 4)]
+                ),
+                child: const Text("BẮT ĐẦU", style: TextStyle(color: _LearnStyles.unit1Color, fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
 
-        const SizedBox(height: 8),
-        Text(
-          lesson['title'] ?? "Bài học",
-          style: TextStyle(
-              color: status == LessonStatus.locked ? _AppColors.greyShadow : _AppColors.black,
-              fontWeight: FontWeight.bold,
-              fontSize: 12
-          ),
-          textAlign: TextAlign.center,
+            button,
+
+            const SizedBox(height: 8),
+            Text(
+              lesson['title'] ?? 'Bài học',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: isLocked ? Colors.grey : Colors.black87
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ],
     );
@@ -346,9 +483,9 @@ class PathPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = _AppColors.grey
+      ..color = _LearnStyles.lockedGray
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8.0
+      ..strokeWidth = 12.0 // Đường đi dày hơn chút
       ..strokeCap = StrokeCap.round;
 
     final centerX = size.width / 2;
@@ -363,7 +500,12 @@ class PathPainter extends CustomPainter {
       Path path = Path();
       path.moveTo(startX, startY);
 
-      path.cubicTo(startX, startY + (rowHeight/2), endX, endY - (rowHeight/2), endX, endY);
+      // Vẽ đường cong Bezier mềm mại
+      path.cubicTo(
+          startX, startY + (rowHeight / 2),
+          endX, endY - (rowHeight / 2),
+          endX, endY
+      );
 
       canvas.drawPath(path, paint);
     }

@@ -530,12 +530,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
           const Text("Nói câu này:", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey)),
           const SizedBox(height: 16),
 
-          Text(
-            q['correctAnswer'] ?? q['question'],
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 30),
+
 
           GestureDetector(
             onTap: () => _speak(q['correctAnswer'] ?? q['question']),

@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:englishmaster/config/colors.dart';
 import 'package:englishmaster/screens/auth/login_screen.dart'; // Bạn cần tạo file này
 import 'package:englishmaster/screens/main_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:englishmaster/services/notification_service.dart'; // Import service vừa tạo
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Khởi tạo Notification Service bằng Get.putAsync
+  await Get.putAsync(() => NotificationService().init());
+
   runApp(const MyApp());
 }
 
@@ -13,13 +20,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return GetMaterialApp(
       title: 'App Học Tiếng Anh',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: AppColors.primary,
         scaffoldBackgroundColor: AppColors.background,
-        fontFamily: 'Nunito', // Cài font giống web nếu cần
+        fontFamily: 'Nunito',
         useMaterial3: true,
       ),
       home: const AuthCheck(),

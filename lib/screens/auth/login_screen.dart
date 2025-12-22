@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:englishmaster/config/colors.dart';
 import 'package:englishmaster/services/api_service.dart';
 import 'package:englishmaster/screens/main_screen.dart';
-import 'package:englishmaster/screens/auth/register_screen.dart'; // Chúng ta sẽ tạo file này ở bước 3
+import 'package:englishmaster/screens/auth/register_screen.dart';
+import 'package:englishmaster/screens/auth/forgot_password_screen.dart'; // ✅ Import màn hình mới
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
       await _apiService.login(_emailController.text, _passwordController.text);
 
       if (!mounted) return;
-      // Chuyển sang màn hình chính và xóa lịch sử quay lại Login
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const MainScreen()),
@@ -59,7 +59,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo hoặc Hình ảnh minh họa
                   const Icon(Icons.school, size: 80, color: AppColors.primary),
                   const SizedBox(height: 16),
                   const Text(
@@ -69,7 +68,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 40),
 
-                  // Input Email
                   TextField(
                     controller: _emailController,
                     decoration: InputDecoration(
@@ -80,7 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Input Password
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
@@ -90,9 +87,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
-                  const SizedBox(height: 24),
 
-                  // Nút Đăng nhập
+                  // ✅ Nút Quên mật khẩu (Mới thêm)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                        );
+                      },
+                      child: const Text("Quên mật khẩu?", style: TextStyle(color: Colors.grey)),
+                    ),
+                  ),
+                  const SizedBox(height: 8), // Giảm khoảng cách để cân đối
+
                   ElevatedButton(
                     onPressed: _isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
@@ -107,7 +117,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Chuyển sang Đăng ký
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
