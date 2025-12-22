@@ -11,8 +11,6 @@ class NotificationService extends GetxService {
   // Khởi tạo Service
   Future<NotificationService> init() async {
     // 1. Cấu hình cho Android
-    // Đảm bảo bạn đã thêm icon 'app_icon' vào thư mục android/app/src/main/res/drawable
-    // Nếu chưa có, dùng '@mipmap/ic_launcher' mặc định
     const AndroidInitializationSettings initializationSettingsAndroid =
     AndroidInitializationSettings('@mipmap/ic_launcher');
 
@@ -38,7 +36,7 @@ class NotificationService extends GetxService {
         if (response.payload != null) {
           print('User tapped notification with payload: ${response.payload}');
           // Ví dụ: Điều hướng đến màn hình bài học
-          // Get.toNamed('/lesson', arguments: response.payload);
+          Get.toNamed('/lesson', arguments: response.payload);
         }
       },
     );

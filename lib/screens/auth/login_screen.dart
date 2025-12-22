@@ -18,31 +18,37 @@ class _LoginScreenState extends State<LoginScreen> {
   final _apiService = ApiService();
   bool _isLoading = false;
 
-  void _handleLogin() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+  Future<void> _handleLogin() async {
+    if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin')),
+        const SnackBar(content: Text('Vui lòng nhập đầy đủ email và mật khẩu'), backgroundColor: Colors.orange),
       );
       return;
     }
-
     setState(() => _isLoading = true);
-
-    try {
-      await _apiService.login(_emailController.text, _passwordController.text);
+    final result = await _apiService.login(
+        _emailController.text.trim(),
+        _passwordController.text.trim()
+    );
+    setState(() => _isLoading = false);
+    if (result != null && result['error'] == null) {
 
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Đăng nhập thành công!"), backgroundColor: Colors.green),
+      );
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const MainScreen()),
             (route) => false,
       );
-    } catch (e) {
+    } else {
+      String message = result?['error'] ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại.';
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi: ${e.toString().replaceAll("Exception: ", "")}'), backgroundColor: Colors.red),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
