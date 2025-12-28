@@ -10,6 +10,8 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // Thêm dòng này vào đây
+    ndkVersion = "27.0.12077973"
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
 

@@ -67,26 +67,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    // Bước 1: Tắt bàn phím ngay lập tức
+    FocusScope.of(context).unfocus();
+
     setState(() => _isLoading = true);
 
     try {
-      await _apiService.verifyOtp(
+      final result = await _apiService.verifyOtp(
         _emailController.text,
         _otpController.text,
       );
+
+      setState(() => _isLoading = false);
+
+      if (result != null && result['error'] != null) {
+        _showSnack(result['error'], Colors.red);
+        return;
+      }
 
       if (!mounted) return;
 
       _showSnack('Xác thực thành công! Tài khoản đã được kích hoạt.', Colors.green);
 
-      // Đợi 1 chút rồi quay về màn hình login
-      await Future.delayed(const Duration(seconds: 1));
-      if (mounted) Navigator.pop(context); // Quay về Login
+      // Bước 2: Đợi một chút để bàn phím hạ xuống hoàn toàn và Snack bar kịp hiển thị
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (mounted) {
+        // Sử dụng Navigator.of(context).pop() thay vì Navigator.pop(context)
+        // để đảm bảo context đúng cấp
+        Navigator.of(context).pop();
+      }
 
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _showSnack('Lỗi: ${e.toString().replaceAll("Exception: ", "")}', Colors.red);
+      _showSnack('Lỗi kết nối: ${e.toString()}', Colors.red);
     }
   }
 
@@ -244,7 +259,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 24, letterSpacing: 8),
           decoration: InputDecoration(
-            hintText: "######",
+            hintText: "******",
             counterText: "",
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -274,5 +289,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    // Giải phóng tất cả các controller
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _ageController.dispose();
+    _otpController.dispose();
+    super.dispose();
   }
 }
