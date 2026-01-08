@@ -24,7 +24,7 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   void initState() {
     super.initState();
-    _flashcardsFuture = _apiService.getFlashcardsByDeck(widget.deckId);
+    _flashcardsFuture = _apiService.getFlashcardsByDeck(widget.deckId).then((response) => response.data ?? []);
   }
 
   void _nextCard(int totalLength) {
@@ -119,7 +119,6 @@ class _QuizScreenState extends State<QuizScreen> {
 
           return Column(
             children: [
-              // 1. KHU VỰC THẺ (Flashcard Area)
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
@@ -157,13 +156,11 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
 
-              // 2. THANH ĐIỀU HƯỚNG (Navigation Bar)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Nút Trước (Previous)
                     IconButton.filled(
                       onPressed: _currentIndex > 0 ? _previousCard : null,
                       icon: const Icon(Icons.arrow_back_rounded),
@@ -177,7 +174,6 @@ class _QuizScreenState extends State<QuizScreen> {
                       ),
                     ),
 
-                    // Số trang (Counter)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
@@ -194,7 +190,6 @@ class _QuizScreenState extends State<QuizScreen> {
                       ),
                     ),
 
-                    // Nút Sau (Next)
                     IconButton.filled(
                       onPressed: _currentIndex < flashcards.length - 1 ? () => _nextCard(flashcards.length) : null,
                       icon: const Icon(Icons.arrow_forward_rounded),
@@ -213,7 +208,6 @@ class _QuizScreenState extends State<QuizScreen> {
 
               const SizedBox(height: 10),
 
-              // 3. NÚT ĐÁNH GIÁ (Grading Buttons)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
                 child: Row(
@@ -285,7 +279,6 @@ class _QuizScreenState extends State<QuizScreen> {
     Color bgColor = Colors.white;
     Color textColor = isBack ? const Color(0xFF2D3436) : AppColors.primary;
 
-    // Tạo shadow nhẹ nhàng
     List<BoxShadow> shadows = [
       BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, 8), blurRadius: 16)
     ];
@@ -305,7 +298,6 @@ class _QuizScreenState extends State<QuizScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Label (Thuật ngữ / Định nghĩa)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -324,7 +316,6 @@ class _QuizScreenState extends State<QuizScreen> {
           ),
           const SizedBox(height: 30),
 
-          // Ảnh minh họa (chỉ mặt trước)
           if (displayImage != null && displayImage.isNotEmpty) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
@@ -338,7 +329,6 @@ class _QuizScreenState extends State<QuizScreen> {
             const SizedBox(height: 30),
           ],
 
-          // Nội dung text
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Text(
@@ -353,7 +343,6 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
 
-          // Hướng dẫn chạm (chỉ mặt trước)
           if (!isBack) ...[
             const SizedBox(height: 40),
             Icon(Icons.touch_app_rounded, color: Colors.grey.shade300, size: 28),

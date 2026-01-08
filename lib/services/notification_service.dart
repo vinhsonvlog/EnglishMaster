@@ -4,6 +4,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter/material.dart';
 
+
 class NotificationService extends GetxService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
   FlutterLocalNotificationsPlugin();
@@ -35,7 +36,6 @@ class NotificationService extends GetxService {
         // Xử lý khi người dùng bấm vào thông báo
         if (response.payload != null) {
           print('User tapped notification with payload: ${response.payload}');
-          // Ví dụ: Điều hướng đến màn hình bài học
           Get.toNamed('/lesson', arguments: response.payload);
         }
       },
@@ -43,12 +43,12 @@ class NotificationService extends GetxService {
 
     // 5. Khởi tạo Timezone (để lên lịch)
     tz.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Asia/Ho_Chi_Minh'));
 
     return this;
   }
 
   // --- HÀM HIỂN THỊ THÔNG BÁO NGAY LẬP TỨC ---
-  // Dùng khi Backend trả về thông báo mới hoặc user hoàn thành bài học
   Future<void> showNotification({
     required int id,
     required String title,
@@ -57,8 +57,8 @@ class NotificationService extends GetxService {
   }) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
     AndroidNotificationDetails(
-      'english_master_channel', // Id kênh
-      'Học tập', // Tên kênh hiển thị với user
+      'english_master_channel',
+      'Học tập',
       channelDescription: 'Thông báo nhắc nhở học tập',
       importance: Importance.max,
       priority: Priority.high,
@@ -78,13 +78,12 @@ class NotificationService extends GetxService {
   }
 
   // --- HÀM LÊN LỊCH THÔNG BÁO (NHẮC HỌC BÀI) ---
-  // Phù hợp với logic Streak trong Backend của bạn
   Future<void> scheduleDailyReminder() async {
     await flutterLocalNotificationsPlugin.zonedSchedule(
       0,
       'Đã đến giờ học!',
       'Duy trì Streak của bạn bằng cách hoàn thành 1 bài học ngay.',
-      _nextInstanceOfTime(20, 0), // Nhắc vào 20:00 hàng ngày
+      _nextInstanceOfTime(15, 20),
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'daily_reminder_channel',
@@ -116,5 +115,6 @@ class NotificationService extends GetxService {
         .resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+
   }
 }

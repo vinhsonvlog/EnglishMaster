@@ -21,10 +21,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   Future<void> _loadData() async {
     try {
-      final data = await _apiService.getLeaderboard();
+      final response = await _apiService.getLeaderboard();
       if (mounted) {
         setState(() {
-          _users = data;
+          _users = response.data ?? [];
           _isLoading = false;
         });
       }
@@ -49,7 +49,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _users.isEmpty
-          // ✅ HIỂN THỊ KHI KHÔNG CÓ DỮ LIỆU
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -107,7 +106,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                   radius: 18,
                                   backgroundColor: Colors.grey[200],
                                   child: ClipOval(
-                                    // Dùng ClipOval để đảm bảo ảnh bên trong được bo tròn
                                     child: (user['avatar'] != null)
                                         ? Image.network(
                                             ApiService.getValidImageUrl(
@@ -116,7 +114,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                             fit: BoxFit.cover,
                                             width: 36, // width = 2 * radius
                                             height: 36, // height = 2 * radius
-                                            // Xử lý khi có lỗi tải ảnh
                                             errorBuilder:
                                                 (context, error, stackTrace) {
                                                   return Center(
@@ -187,7 +184,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             radius: 30,
             backgroundColor: Colors.grey[200], // Màu nền mặc định
             child: ClipOval(
-              // Dùng ClipOval để đảm bảo ảnh bên trong được bo tròn
               child:
                   (avatarUrl
                       .isNotEmpty) // Chỉ tạo Image.network nếu URL không rỗng
@@ -196,7 +192,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       fit: BoxFit.cover,
                       width: 60, // width = 2 * radius
                       height: 60, // height = 2 * radius
-                      // Xử lý khi có lỗi tải ảnh (404 hoặc lỗi mạng khác)
                       errorBuilder: (context, error, stackTrace) {
                         return Center(
                           child: Text(
@@ -209,7 +204,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           ),
                         );
                       },
-                      // (Tùy chọn) Hiển thị loading indicator khi đang tải
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
                         return const Center(
@@ -217,7 +211,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         );
                       },
                     )
-                  // Hiển thị chữ cái đầu nếu avatarUrl là rỗng
                   : Center(
                       child: Text(
                         user['name'][0],

@@ -15,7 +15,6 @@ class _PracticeDetailScreenState extends State<PracticeDetailScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   dynamic _practiceData;
-  List<dynamic> _questions = [];
 
   @override
   void initState() {
@@ -25,13 +24,19 @@ class _PracticeDetailScreenState extends State<PracticeDetailScreen> {
 
   Future<void> _loadData() async {
     try {
-      final data = await _apiService.getPracticeExerciseById(widget.practiceId);
+      final response = await _apiService.getPracticeExerciseById(widget.practiceId);
       if (mounted) {
-        setState(() {
-          _practiceData = data;
-          _questions = data['questions'] ?? [];
-          _isLoading = false;
-        });
+        if (response.success && response.data != null) {
+          setState(() {
+            _practiceData = response.data;
+            _isLoading = false;
+          });
+        } else {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response.error?.message ?? "Lỗi tải dữ liệu"))
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -52,34 +57,76 @@ class _PracticeDetailScreenState extends State<PracticeDetailScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _questions.isEmpty
-          ? const Center(child: Text("Bài tập này chưa có câu hỏi."))
-          : ListView.builder(
+          : _practiceData == null
+          ? const Center(child: Text("Không thể tải dữ liệu bài tập."))
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        itemCount: _questions.length,
-        itemBuilder: (context, index) {
-          final q = _questions[index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Câu ${index + 1}: ${q['question'] ?? 'Câu hỏi...'}",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  // Hiển thị đáp án (Mock UI - bạn có thể phát triển thêm logic chọn đáp án)
-                  if (q['options'] != null)
-                    ...((q['options'] as List).map((opt) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text("• ${opt['text'] ?? opt}"),
-                    ))),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _practiceData['question'] ?? 'Câu hỏi...',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const SizedBox(height: 16),
+                if (_practiceData['type'] == 'multiple_choice' && _practiceData['choices'] != null)
+                  ...(_practiceData['choices'] as List).asMap().entries.map((entry) => 
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('${String.fromCharCode(65 + entry.key)}. ${entry.value}'),
+                      ),
+                    ),
+                  ),
+                if (_practiceData['type'] == 'fill_blank')
+                  Text(
+                    'Loại: Điền vào chỗ trống',
+                    style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                  ),
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 16),
+                const Text(
+                  'Giải thích:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _practiceData['explanation'] ?? 'Chưa có giải thích',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+                if (_practiceData['correctAnswer'] != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Đáp án: ${_practiceData['correctAnswer']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

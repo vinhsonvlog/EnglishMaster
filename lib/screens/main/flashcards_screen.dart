@@ -27,7 +27,8 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
 
   void _loadDecks() {
     setState(() {
-      _decksFuture = _apiService.getDecks().then((data) {
+      _decksFuture = _apiService.getDecks().then((response) {
+        final data = response.data ?? [];
         _allDecks = data;
         _filteredDecks = data;
         return data;
@@ -201,7 +202,6 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: () {
-            // === LOGIC KIỂM TRA 0 THẺ TẠI ĐÂY ===
             if (totalCards == 0) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -220,7 +220,6 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
               );
               return;
             }
-            // =====================================
 
             Navigator.push(
               context,

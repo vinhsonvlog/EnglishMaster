@@ -19,12 +19,12 @@ class _PracticeScreenState extends State<PracticeScreen> with SingleTickerProvid
     _tabController = TabController(length: 2, vsync: this);
   }
 
-  // Hàm helper để lấy tên hiển thị an toàn
   String _getItemTitle(dynamic item) {
+    if (item['question'] != null && item['question'].toString().isNotEmpty) return item['question'];
     if (item['title'] != null && item['title'].toString().isNotEmpty) return item['title'];
     if (item['name'] != null && item['name'].toString().isNotEmpty) return item['name'];
     if (item['topic'] != null && item['topic'].toString().isNotEmpty) return item['topic'];
-    return "Bài tập #${item['_id'].toString().substring(0, 4)}"; // Fallback nếu không có tên
+    return "Bài tập #${item['_id'].toString().substring(0, 4)}";
   }
 
   @override
@@ -49,8 +49,8 @@ class _PracticeScreenState extends State<PracticeScreen> with SingleTickerProvid
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildList(_apiService.getPracticeExercises(), isTest: false),
-          _buildList(_apiService.getTests(), isTest: true),
+          _buildList(_apiService.getPracticeExercises().then((r) => r.data ?? []), isTest: false),
+          _buildList(_apiService.getTests().then((r) => r.data ?? []), isTest: true),
         ],
       ),
     );
@@ -104,7 +104,12 @@ class _PracticeScreenState extends State<PracticeScreen> with SingleTickerProvid
                       children: [
                         Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 4),
-                        Text(item['description'] ?? 'Không có mô tả', style: TextStyle(color: Colors.grey[600], fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        Text(
+                          item['explanation'] ?? item['description'] ?? 'Không có mô tả', 
+                          style: TextStyle(color: Colors.grey[600], fontSize: 13), 
+                          maxLines: 2, 
+                          overflow: TextOverflow.ellipsis
+                        ),
                       ],
                     ),
                   ),

@@ -49,18 +49,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final response = await _apiService.getUserProfile();
 
       if (mounted) {
-        setState(() {
-          // Xử lý cấu trúc dữ liệu trả về từ API
-          var data = response['data'] ?? response;
+        if (response.success && response.data != null) {
+          setState(() {
+            var data = response.data!['data'] ?? response.data;
 
-          if (data['user'] != null && data['user'] is Map) {
-            _userData = data['user'];
+            if (data['user'] != null && data['user'] is Map) {
+              _userData = data['user'];
+            } else {
+              _userData = data;
+            }
+
+            _isLoading = false;
+          });
+        } else {
+          if (response.error?.statusCode == 401) {
+            _performLogout();
           } else {
-            _userData = data;
+            setState(() => _isLoading = false);
           }
-
-          _isLoading = false;
-        });
+        }
       }
     } catch (e) {
       print("Lỗi tải profile: $e");
@@ -92,7 +99,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Tạo danh sách thành tích dựa trên số liệu thực tế
   List<Map<String, dynamic>> _getAchievements(int streak, int xp, int completedLessons) {
     return [
       {
@@ -137,17 +143,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return const Scaffold(backgroundColor: _ProfileColors.background, body: Center(child: CircularProgressIndicator()));
     }
 
-    // Lấy dữ liệu an toàn, fallback về giá trị mặc định nếu null
     final String name = _userData['name'] ?? _userData['username'] ?? 'Người dùng';
     final String username = _userData['username'] ?? name; // Username fallback về name nếu ko có
 
-    // Nếu API có field email thì dùng, ko thì thôi (ko bắt buộc hiển thị ở header)
-    // final String email = _userData['email'] ?? '';
 
     final String joinDate = _formatJoinDate(_userData['createdAt']);
     final String? avatarUrl = _userData['avatar'];
 
-    // Stats extraction
     int streak = 0;
     if (_userData['streak'] != null) {
       streak = (_userData['streak'] is Map)
@@ -157,8 +159,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     int xp = int.tryParse(_userData['xp']?.toString() ?? '0') ?? 0;
 
-    // Lấy gems, hỗ trợ cả key 'gems' và 'gem'
-    int gems = int.tryParse((_userData['gems'] ?? _userData['gem'] ?? '0').toString()) ?? 0;
+    int gems = 0;
+    if (_userData['gems'] != null) {
+      if (_userData['gems'] is Map) {
+        gems = int.tryParse(_userData['gems']['amount']?.toString() ?? '0') ?? 0;
+      } else {
+        gems = int.tryParse(_userData['gems'].toString()) ?? 0;
+      }
+    } else if (_userData['gem'] != null) {
+      gems = int.tryParse(_userData['gem'].toString()) ?? 0;
+    }
+    
+    print("👤 DEBUG Profile - streak: $streak, xp: $xp, gems: $gems");
+    print("👤 DEBUG _userData['gems']: ${_userData['gems']}, type: ${_userData['gems'].runtimeType}");
 
     int completedLessons = 0;
     if (_userData['progress'] != null && _userData['progress']['completedLessons'] != null) {
@@ -183,17 +196,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Column(
           children: [
-            // 1. Profile Header
             _buildProfileHeader(name, username, joinDate, avatarUrl),
             const SizedBox(height: 24),
 
-            // 2. Statistics Grid
             _buildSectionTitle("Thống kê"),
             const SizedBox(height: 16),
             _buildStatsGrid(streak, xp, gems),
             const SizedBox(height: 32),
 
-            // 3. Achievements List
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -209,14 +219,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildSectionTitle("Cài đặt"),
             const SizedBox(height: 10),
 
-            // Menu Option Test Thông báo
             _buildMenuOption(
                 Icons.notifications_active,
                 "Test Thông báo ngay",
                 _testNotification
             ),
 
-            // Menu Option Bật nhắc nhở
             _buildMenuOption(
                 Icons.alarm,
                 "Bật nhắc nhở học tập (20:00)",
@@ -228,7 +236,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-  // --- WIDGET HELPER ---
 
   Widget _buildSectionTitle(String title) {
     return Align(
@@ -237,7 +244,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Hàm tạo mục Menu (Sửa lỗi undefined method)
   Widget _buildMenuOption(IconData icon, String title, VoidCallback onTap) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -259,7 +265,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- WIDGETS ---
 
   Widget _buildProfileHeader(String name, String username, String joinDate, String? avatarUrl) {
     return Container(
@@ -273,7 +278,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Row(
             children: [
-              // Avatar
               Container(
                 width: 80, height: 80,
                 decoration: BoxDecoration(
@@ -290,7 +294,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(width: 20),
 
-              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,7 +372,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // FIX LỖI OVERFLOW Ở ĐÂY
   Widget _buildStatCard(IconData icon, String value, String label, Color iconColor, Color bgColor) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -386,7 +388,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Icon(icon, color: iconColor, size: 24),
               const SizedBox(width: 8), // Tăng khoảng cách chút
-              // Sử dụng Expanded để Text chiếm phần còn lại và xuống dòng hoặc ... nếu dài
               Expanded(
                 child: Text(
                   value,
@@ -492,7 +493,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
     );
   }
-    // Hàm test thông báo
     void _testNotification() {
       _notificationService.showNotification(
         id: 1,
@@ -501,7 +501,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    // Hàm bật nhắc nhở
     void _enableDailyReminder() async {
       await _notificationService.requestPermissions(); // Xin quyền trước
       await _notificationService.scheduleDailyReminder();
