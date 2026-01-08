@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text.trim()
     );
     setState(() => _isLoading = false);
-    if (result != null && result['error'] == null) {
+    if (result.success) {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -43,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
             (route) => false,
       );
     } else {
-      String message = result?['error'] ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại.';
+      String message = result.error?.message ?? result.message ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại.';
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
