@@ -10,11 +10,13 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  // Controllers cho form đăng ký
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _ageController = TextEditingController();
 
+  // Controller cho OTP
   final _otpController = TextEditingController();
 
   final _apiService = ApiService();
@@ -22,6 +24,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   bool _showOtpForm = false; // State để chuyển đổi giữa form đăng ký và form OTP
 
+  // Xử lý Đăng ký (Bước 1)
   void _handleRegister() async {
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
@@ -42,6 +45,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
 
+      // Thành công bước 1, chuyển sang form OTP
       setState(() {
         _showOtpForm = true;
         _isLoading = false;
@@ -56,6 +60,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  // Xử lý Xác thực OTP (Bước 2)
   void _handleVerifyOtp() async {
     if (_otpController.text.isEmpty) {
       _showSnack('Vui lòng nhập mã OTP', Colors.orange);
@@ -74,6 +79,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       _showSnack('Xác thực thành công! Tài khoản đã được kích hoạt.', Colors.green);
 
+      // Đợi 1 chút rồi quay về màn hình login
       await Future.delayed(const Duration(seconds: 1));
       if (mounted) Navigator.pop(context); // Quay về Login
 
@@ -84,6 +90,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  // Xử lý gửi lại mã OTP
   void _handleResendOtp() async {
     try {
       await _apiService.resendOtp(_emailController.text);
@@ -108,6 +115,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
+            // Nếu đang ở màn hình OTP thì quay lại form đăng ký
             if (_showOtpForm) {
               setState(() => _showOtpForm = false);
             } else {
@@ -132,6 +140,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  // UI Form Đăng ký
   Widget _buildRegisterForm() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -144,6 +153,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 40),
 
+        // Input Name (Trước đây là Username)
         TextField(
           controller: _nameController,
           decoration: InputDecoration(
@@ -154,6 +164,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 16),
 
+        // Input Email
         TextField(
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
@@ -165,6 +176,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 16),
 
+        // Input Password
         TextField(
           controller: _passwordController,
           obscureText: true,
@@ -176,6 +188,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 16),
 
+        // Input Age (Mới thêm)
         TextField(
           controller: _ageController,
           keyboardType: TextInputType.number,
@@ -187,6 +200,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 24),
 
+        // Nút Tạo tài khoản
         ElevatedButton(
           onPressed: _isLoading ? null : _handleRegister,
           style: ElevatedButton.styleFrom(
@@ -203,6 +217,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  // UI Form Nhập OTP
   Widget _buildOtpForm() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -221,6 +236,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 40),
 
+        // Input OTP
         TextField(
           controller: _otpController,
           keyboardType: TextInputType.number,
@@ -235,6 +251,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 24),
 
+        // Nút Xác minh
         ElevatedButton(
           onPressed: _isLoading ? null : _handleVerifyOtp,
           style: ElevatedButton.styleFrom(
@@ -250,6 +267,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         const SizedBox(height: 16),
 
+        // Nút Gửi lại mã
         TextButton(
           onPressed: _isLoading ? null : _handleResendOtp,
           child: const Text("Gửi lại mã", style: TextStyle(color: Colors.blue)),
