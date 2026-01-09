@@ -8,8 +8,6 @@ import 'package:englishmaster/services/notification_service.dart'; // Import ser
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Khởi tạo Notification Service bằng Get.putAsync
   await Get.putAsync(() => NotificationService().init());
 
   runApp(const MyApp());

@@ -23,7 +23,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   final AudioPlayer _audioPlayer = AudioPlayer();
   final stt.SpeechToText _speech = stt.SpeechToText();
 
-  // States
   bool _isLoading = true;
   List<dynamic> _questions = [];
   int _currentIndex = 0;
@@ -33,17 +32,14 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   bool _isCorrect = false;
   bool _showFeedback = false;
 
-  // Speaking States
   bool _isListening = false;
   String _spokenText = "";
   bool _speechAvailable = false;
 
-  // Answers State
   String? _selectedOptionId;
   List<String> _selectedWords = [];
   String _inputValue = "";
 
-  // Match Pairs State
   String? _selectedLeft;
   String? _selectedRight;
   List<String> _matchedPairs = [];
@@ -115,8 +111,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     }
   }
 
-  // --- THUẬT TOÁN SO SÁNH CHUỖI (LEVENSHTEIN DISTANCE) ---
-  // Tính tỷ lệ giống nhau giữa 2 chuỗi (0.0 -> 1.0)
   double _calculateSimilarity(String s1, String s2) {
     if (s1.isEmpty) return s2.isEmpty ? 1.0 : 0.0;
     if (s2.isEmpty) return 0.0;
@@ -149,7 +143,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     return (maxLength - distance) / maxLength;
   }
 
-  // --- HÀM THU ÂM & TỰ ĐỘNG CHẤM ĐIỂM ---
   void _listen() async {
     if (!_speechAvailable) {
       var status = await Permission.microphone.request();
@@ -176,9 +169,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             _spokenText = val.recognizedWords;
           });
 
-          // ✅ TỰ ĐỘNG CHẤM KHI NGỪNG NÓI (finalResult = true)
           if (val.finalResult) {
-            // Delay 0.5s để cập nhật UI rồi chấm
             Future.delayed(const Duration(milliseconds: 500), () {
               if (!_isChecked && _isListening) {
                 _speech.stop();
@@ -197,7 +188,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     }
   }
 
-  // --- LOAD DATA ---
   void _loadLessonData() async {
     try {
       final results = await Future.wait([
@@ -210,7 +200,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       final exercises = results[2] as List<dynamic>;
       List<dynamic> transformedQuestions = [];
 
-      // 1. Vocabularies
       for (var vocab in vocabularies) {
         final otherVocabs = vocabularies.where((v) => v['_id'] != vocab['_id']).toList()..shuffle();
         final wrongChoices = otherVocabs.take(2).toList();
@@ -228,7 +217,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         });
       }
 
-      // 2. Exercises
       for (var exercise in exercises) {
         String type = exercise['type'];
         String questionType = 'multiple_choice';
@@ -304,7 +292,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     setState(() => _progress = target);
   }
 
-  // --- KIỂM TRA ĐÁP ÁN ---
   void _handleCheck() {
     if (_questions.isEmpty) return;
     final q = _questions[_currentIndex];
@@ -322,14 +309,11 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     } else if (type == 'listen_write' || type == 'fill_in_blank') {
       correct = _inputValue.trim().toLowerCase() == q['correctAnswer'].toString().toLowerCase();
     } else if (type == 'speaking') {
-      // ✅ Logic chấm điểm mới: Chấp nhận sai số 50%
       String target = q['correctAnswer'].toString();
       String spoken = _spokenText;
 
-      // Tính độ tương đồng (0.0 -> 1.0)
       double similarity = _calculateSimilarity(spoken, target);
 
-      // Nếu giống trên 50% (0.5) là OK
       correct = similarity >= 0.5;
 
       if (_spokenText.isEmpty) {
@@ -376,7 +360,15 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     }
   }
 
-  void _showCompletionDialog() {
+  void _showCompletionDialog() async {
+    try {
+      await _apiService.updateProgress(widget.lessonId, _hearts);
+      print("Đã cập nhật tiến độ");
+    } catch (e) {
+      print("Lỗi cập nhật tiến độ: $e");
+    }
+    if (!mounted) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -397,8 +389,8 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
           Center(
             child: ElevatedButton(
               onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
+                Navigator.pop(ctx); // Đóng Dialog
+                Navigator.pop(context, true);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -521,7 +513,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     }
   }
 
-  // WIDGET SPEAKING
   Widget _buildSpeakingQuestion(dynamic q) {
     return Center(
       child: Column(
@@ -585,7 +576,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     );
   }
 
-  // ... Các widget khác giữ nguyên
   Widget _buildVocabularyQuestion(dynamic q) {
     return GridView.count(
       crossAxisCount: 2,

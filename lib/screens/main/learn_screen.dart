@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:englishmaster/services/api_service.dart';
 import 'package:englishmaster/screens/lesson/lesson_screen.dart';
 
-// Enum trạng thái bài học
 enum LessonStatus { locked, unlocked, current, completed }
 
 class _LearnStyles {
-  // --- COLORS (Giống Learn.jsx) ---
   static const Color unit1Color = Color(0xFF58CC02);
   static const Color unit1Shadow = Color(0xFF46A302);
 
@@ -20,7 +18,6 @@ class _LearnStyles {
 
   static const Color background = Colors.white;
 
-  // --- GRADIENTS (Giống CSS linear-gradient) ---
   static const LinearGradient unit1Gradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
@@ -54,7 +51,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
 
   bool _isLoading = true;
 
-  // Dữ liệu
   List<Map<String, dynamic>> _units = [];
   Map<String, dynamic> _userProgress = {};
   Map<String, dynamic> _userProfile = {};
@@ -63,7 +59,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    // Animation nhịp tim cho bài hiện tại
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -86,21 +81,41 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
     setState(() => _isLoading = true);
     try {
       final results = await Future.wait([
-        _apiService.getLessons(),      // [0]
-        _apiService.getUserProgress(), // [1]
-        _apiService.getUserProfile(),  // [2]
+        _apiService.getLessons(),      // [0] ApiResponse<List<dynamic>>
+        _apiService.getUserProgress(), // [1] ApiResponse<Map<String, dynamic>>
+        _apiService.getUserProfile(),  // [2] ApiResponse<Map<String, dynamic>>
       ]);
 
       if (!mounted) return;
 
-      var rawLessons = results[0] as List<dynamic>;
-      var progress = results[1] as Map<String, dynamic>;
-      var profile = (results[2] as Map<String, dynamic>)['data'] ?? results[2];
-
-      // 1. Sắp xếp tất cả bài học trước
+      var rawLessons = (results[0].data as List<dynamic>?) ?? [];
+      var progress = (results[1].data as Map<String, dynamic>?) ?? {'completedLessons': [], 'currentLesson': null};
+      var profileData = (results[2].data as Map<String, dynamic>?) ?? {};
+      
+      print("📊 DEBUG profileData: $profileData");
+      
+      Map<String, dynamic> profile;
+      if (profileData.containsKey('data') && profileData['data'] is Map) {
+        var nestedData = profileData['data'] as Map<String, dynamic>;
+        if (nestedData.containsKey('user') && nestedData['user'] is Map) {
+          profile = nestedData['user'] as Map<String, dynamic>;
+          print("📊 DEBUG profile từ data.user: $profile");
+        } else {
+          profile = nestedData;
+          print("📊 DEBUG profile từ data: $profile");
+        }
+      } else if (profileData.containsKey('user') && profileData['user'] is Map) {
+        profile = profileData['user'] as Map<String, dynamic>;
+        print("📊 DEBUG profile từ user: $profile");
+      } else {
+        profile = profileData;
+        print("📊 DEBUG profile trực tiếp: $profile");
+      }
+      
+      print("📊 DEBUG streak: ${profile['streak']}, gems: ${profile['gems']}, xp: ${profile['xp']}");
+      
       rawLessons.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
 
-      // 2. LỌC DỮ LIỆU: Chỉ lấy Lesson của Unit 1 (Bỏ .take(3) để lấy hết)
       var filteredLessons = rawLessons.where((lesson) {
         String unitTitle = "";
         if (lesson['unit'] != null && lesson['unit'] is Map) {
@@ -111,11 +126,9 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
         return unitTitle.contains("1");
       }).toList();
 
-      // 3. Xác định Current Lesson ID (Logic giống React)
       List<dynamic> completedIds = progress['completedLessons'] ?? [];
       String? currentId = progress['currentLesson'];
 
-      // Nếu backend chưa trả về currentLesson, tìm bài đầu tiên chưa học trong Unit 1
       if (currentId == null || currentId.isEmpty) {
         for (var lesson in filteredLessons) {
           if (!completedIds.contains(lesson['_id'])) {
@@ -123,10 +136,8 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
             break;
           }
         }
-        // Nếu đã học hết unit 1, có thể currentId sẽ null (hoặc bài cuối)
       }
 
-      // 4. Tạo Object Unit 1 duy nhất
       Map<String, dynamic> unit1 = {
         'id': 'unit1',
         'title': 'Unit 1',
@@ -151,7 +162,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
     }
   }
 
-  // Map icon theo type (Giống React)
   Widget _getLessonIcon(String type, Color color, double size) {
     IconData iconData;
     switch (type) {
@@ -172,11 +182,17 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
       return const Scaffold(backgroundColor: Colors.white, body: Center(child: CircularProgressIndicator()));
     }
 
-    // Stats an toàn
-    final streak = (_userProfile['streak'] is Map) ? _userProfile['streak']['count'] : (_userProfile['streak'] ?? 0);
-    final gems = _userProfile['gems'] ?? _userProfile['gem'] ?? 0;
-    final xp = _userProfile['xp'] ?? 0;
-
+    final streak = (_userProfile['streak'] is Map) 
+        ? (_userProfile['streak']['count'] ?? 0)
+        : (_userProfile['streak'] ?? 0);
+    
+    final gems = (_userProfile['gems'] is Map)
+        ? (_userProfile['gems']['amount'] ?? 0)
+        : (int.tryParse(_userProfile['gems']?.toString() ?? '') ?? 
+           int.tryParse(_userProfile['gem']?.toString() ?? '') ?? 0);
+    
+    final xp = int.tryParse(_userProfile['xp']?.toString() ?? '') ?? 0;
+    
     return Scaffold(
       backgroundColor: _LearnStyles.background,
       appBar: AppBar(
@@ -186,7 +202,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Cờ (Dùng ảnh asset hoặc icon fallback)
             Image.asset('assets/images/US.png', width: 32, errorBuilder: (c,e,s) => const Icon(Icons.flag, color: Colors.grey)),
             _buildStatItem(Icons.local_fire_department, Colors.orange, "$streak"),
             _buildStatItem(Icons.diamond, Colors.blue, "$gems"),
@@ -226,7 +241,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
   Widget _buildUnitSection(Map<String, dynamic> unit) {
     return Column(
       children: [
-        // Unit Header (Xanh lá giống React)
         Container(
           margin: const EdgeInsets.fromLTRB(16, 24, 16, 24),
           padding: const EdgeInsets.all(20),
@@ -254,7 +268,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
                   ],
                 ),
               ),
-              // Nút Hướng Dẫn
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
@@ -274,7 +287,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
           ),
         ),
 
-        // Intro text
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
           child: Text(
@@ -283,7 +295,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
           ),
         ),
 
-        // Lesson Map (Con đường bài học)
         _buildLessonMap(unit['lessons']),
       ],
     );
@@ -297,7 +308,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
-          // Vẽ đường nối
           Positioned.fill(
             child: CustomPaint(
               painter: PathPainter(
@@ -307,14 +317,12 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
               ),
             ),
           ),
-          // Vẽ các nút bài học
           ...List.generate(lessons.length, (index) {
             final lesson = lessons[index];
             final completedIds = _userProgress['completedLessons'] ?? [];
             final bool isCompleted = completedIds.contains(lesson['_id']);
             final bool isCurrent = lesson['_id'] == _calculatedCurrentLessonId;
 
-            // Logic khóa: Mở nếu bài trước đã xong HOẶC là bài hiện tại. Bài 0 luôn mở.
             bool isLocked = false;
             if (index > 0) {
               final prevLesson = lessons[index - 1];
@@ -322,7 +330,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
               isLocked = !isPrevCompleted && !isCurrent && !isCompleted;
             }
 
-            // Vị trí hình Sin
             final double offsetX = 70.0 * sin(index * pi / 2);
 
             return Positioned(
@@ -348,7 +355,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
     Color iconColor = _LearnStyles.lockedIcon;
     double size = 70;
 
-    // Xác định màu sắc dựa trên trạng thái
     if (isCompleted) {
       bgGradient = _LearnStyles.goldGradient;
       shadowColor = _LearnStyles.goldShadow;
@@ -360,15 +366,21 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
     }
 
     Widget button = GestureDetector(
-      onTap: () {
+      onTap: () async {
         if (isLocked) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Hoàn thành bài học trước để mở khóa!"), duration: Duration(seconds: 1)),
           );
         } else {
-          Navigator.push(context, MaterialPageRoute(
-              builder: (context) => LessonScreen(lessonId: lesson['_id'])
-          )).then((_) => _fetchData());
+          final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => LessonScreen(lessonId: lesson['_id']))
+          );
+
+          if (result == true) {
+            print(" Phát hiện bài học hoàn thành, đang tải lại dữ liệu...");
+            _fetchData();
+          }
         }
       },
       child: Container(
@@ -398,7 +410,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
             children: [
               _getLessonIcon(lesson['type'] ?? 'lesson', iconColor, 32),
 
-              // Ngôi sao vàng nhỏ khi hoàn thành
               if (isCompleted)
                 Positioned(
                   right: 10,
@@ -414,7 +425,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
       ),
     );
 
-    // Hiệu ứng nhịp tim
     if (isCurrent) {
       button = ScaleTransition(scale: _scaleAnim, child: button);
     }
@@ -423,7 +433,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
-        // Linh thú Tini (Chỉ hiện ở bài đang học)
         if (isCurrent)
           Positioned(
             left: isLeft ? 100 : null,
@@ -440,7 +449,6 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
 
         Column(
           children: [
-            // Bong bóng "Bắt đầu"
             if (isCurrent)
               Container(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -500,7 +508,6 @@ class PathPainter extends CustomPainter {
       Path path = Path();
       path.moveTo(startX, startY);
 
-      // Vẽ đường cong Bezier mềm mại
       path.cubicTo(
           startX, startY + (rowHeight / 2),
           endX, endY - (rowHeight / 2),

@@ -5,7 +5,6 @@ import 'package:englishmaster/screens/main/flashcards_screen.dart';
 import 'package:englishmaster/screens/main/profile_screen.dart';
 import 'package:englishmaster/screens/leaderboard/leaderboard_screen.dart';
 import 'package:englishmaster/screens/shop/shop_screen.dart';
-import 'package:englishmaster/screens/practice/practice_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -17,11 +16,9 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  // Danh sách 5 màn hình chính
   final List<Widget> _screens = [
     const LearnScreen(),        // 0: Học (Home)
     const FlashcardsScreen(),   // 1: Thẻ từ (Flashcards)
-    const PracticeScreen(),
     const LeaderboardScreen(),  // 2: Xếp hạng (Leaderboard)
     const ShopScreen(),         // 3: Cửa hàng (Shop)
     const ProfileScreen(),      // 4: Hồ sơ (Profile)
@@ -36,7 +33,6 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // IndexedStack giữ trạng thái màn hình khi chuyển tab (không load lại)
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens,
@@ -56,10 +52,6 @@ class _MainScreenState extends State<MainScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.style),
               label: 'Thẻ từ',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.fitness_center),
-              label: 'Luyện',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.leaderboard),

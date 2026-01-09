@@ -13,17 +13,14 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final ApiService _apiService = ApiService();
 
-  // Controllers
   final _emailController = TextEditingController();
   final _otpController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  // State quản lý UI
   int _currentStep = 1; // 1: Nhập Email, 2: Nhập OTP & Đổi Pass
   bool _isLoading = false;
 
-  // Timer cho nút gửi lại mã
   Timer? _timer;
   int _start = 600; // 10 phút
   bool _canResend = false;
@@ -58,7 +55,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
   }
 
-  // --- BƯỚC 1: GỬI EMAIL ---
   Future<void> _handleSendEmail() async {
     if (_emailController.text.trim().isEmpty) {
       _showSnackBar('Vui lòng nhập email', Colors.orange);
@@ -73,7 +69,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (!mounted) return;
       _showSnackBar('Mã xác nhận đã được gửi đến email!', Colors.green);
 
-      // Chuyển sang bước 2
       setState(() {
         _currentStep = 2;
         _isLoading = false;
@@ -87,7 +82,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
-  // Gửi lại mã OTP
   Future<void> _handleResendOtp() async {
     if (!_canResend) return;
 
@@ -105,7 +99,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
-  // --- BƯỚC 2: ĐẶT LẠI MẬT KHẨU ---
   Future<void> _handleResetPassword() async {
     if (_otpController.text.trim().length != 6) {
       _showSnackBar('Mã OTP phải có 6 số', Colors.orange);
@@ -136,7 +129,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (!mounted) return;
       _showSnackBar('Đổi mật khẩu thành công! Vui lòng đăng nhập.', Colors.green);
 
-      // Delay xíu rồi về màn hình login
       await Future.delayed(const Duration(seconds: 1));
       if (mounted) Navigator.pop(context); // Về Login
 
@@ -196,7 +188,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
               const SizedBox(height: 40),
 
-              // --- FORM BƯỚC 1 (EMAIL) ---
               if (_currentStep == 1) ...[
                 TextField(
                   controller: _emailController,
@@ -223,7 +214,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 ),
               ],
 
-              // --- FORM BƯỚC 2 (OTP + NEW PASS) ---
               if (_currentStep == 2) ...[
                 TextField(
                   controller: _otpController,

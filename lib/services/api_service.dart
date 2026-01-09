@@ -57,20 +57,33 @@ class ApiService {
     }
   }
 
-  Future<dynamic> resendOtp(String email) async {
+  Future<ApiResponse<Map<String, dynamic>>> resendOtp(String email) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/resend-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
       );
-      if (response.statusCode != 200) {
-        final body = jsonDecode(response.body);
-        return {'error': body['message'] ?? 'Không thể gửi lại mã'};
+      
+      final responseBody = jsonDecode(response.body);
+      
+      if (response.statusCode == 200) {
+        return ApiResponse.success(
+          responseBody,
+          message: responseBody['message'] ?? 'Đã gửi lại mã OTP',
+        );
       }
-      return jsonDecode(response.body);
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể gửi lại mã';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      return {'error': e.toString()};
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
   }
 
@@ -81,6 +94,8 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
       );
+
+      final responseBody = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -110,7 +125,7 @@ class ApiService {
 
   // --- QUÊN MẬT KHẨU ---
 
-  Future<dynamic> forgotPassword(String email) async {
+  Future<ApiResponse<Map<String, dynamic>>> forgotPassword(String email) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/forgot-password'),
@@ -118,17 +133,29 @@ class ApiService {
         body: jsonEncode({'email': email}),
       );
 
-      final body = jsonDecode(response.body);
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        return body;
+        return ApiResponse.success(
+          responseBody,
+          message: responseBody['message'] ?? 'Đã gửi mã xác nhận',
+        );
       }
-      return {'error': body['message'] ?? 'Không thể gửi mã xác nhận'};
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể gửi mã xác nhận';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      return {'error': e.toString()};
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
   }
 
-  Future<dynamic> resetPassword(String email, String otp, String newPassword) async {
+  Future<ApiResponse<Map<String, dynamic>>> resetPassword(String email, String otp, String newPassword) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/reset-password'),
@@ -140,13 +167,25 @@ class ApiService {
         }),
       );
 
-      final body = jsonDecode(response.body);
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        return body;
+        return ApiResponse.success(
+          responseBody,
+          message: responseBody['message'] ?? 'Đặt lại mật khẩu thành công',
+        );
       }
-      return {'error': body['message'] ?? 'Đặt lại mật khẩu thất bại'};
+      
+      final errorMessage = responseBody['message'] ?? 'Đặt lại mật khẩu thất bại';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      return {'error': e.toString()};
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
   }
 
@@ -155,6 +194,8 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/progress'), headers: headers);
+
+      final responseBody = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -168,80 +209,145 @@ class ApiService {
 
   // --- LUYỆN TẬP & KIỂM TRA ---
 
-  Future<List<dynamic>> getPracticeExercises() async {
+  Future<ApiResponse<List<dynamic>>> getPracticeExercises() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/practice/exercises'), headers: headers);
+      
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        return List<dynamic>.from(json['data'] ?? []);
-      } else {
-        print('Lỗi tải bài tập: ${response.statusCode}');
+        return ApiResponse.success(
+          List<dynamic>.from(responseBody['data'] ?? []),
+          message: 'Lấy danh sách bài tập thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải bài tập';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 
   // Lấy danh sách bài kiểm tra
-  Future<List<dynamic>> getTests() async {
+  Future<ApiResponse<List<dynamic>>> getTests() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/tests'), headers: headers);
+      
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json['data'] != null && json['data'] is Map && json['data']['tests'] != null) {
-          return List<dynamic>.from(json['data']['tests']);
+        List<dynamic> tests = [];
+        if (responseBody['data'] != null && responseBody['data'] is Map && responseBody['data']['tests'] != null) {
+          tests = List<dynamic>.from(responseBody['data']['tests']);
         }
+        return ApiResponse.success(
+          tests,
+          message: 'Lấy danh sách bài kiểm tra thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải bài kiểm tra';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 
-  Future<dynamic> getPracticeExerciseById(String id) async {
+  Future<ApiResponse<Map<String, dynamic>>> getPracticeExerciseById(String id) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/practice/exercises/$id'), headers: headers);
+      
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        return json['data'];
+        return ApiResponse.success(
+          responseBody['data'] ?? {},
+          message: 'Lấy bài tập thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không tìm thấy bài tập';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return null;
   }
 
-  Future<dynamic> getTestById(String id) async {
+  Future<ApiResponse<Map<String, dynamic>>> getTestById(String id) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/tests/$id'), headers: headers);
+      
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        return json['data'];
+        return ApiResponse.success(
+          responseBody['data'] ?? {},
+          message: 'Lấy bài kiểm tra thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không tìm thấy bài kiểm tra';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return null;
   }
 
   // --- THÀNH TÍCH (ACHIEVEMENTS) ---
-  Future<List<dynamic>> getAchievements() async {
+  Future<ApiResponse<List<dynamic>>> getAchievements() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/achievements'), headers: headers);
+      
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        return List<dynamic>.from(json['data'] ?? []);
+        return ApiResponse.success(
+          List<dynamic>.from(responseBody['data'] ?? []),
+          message: 'Lấy danh sách thành tích thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải thành tích';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print("Lỗi getAchievements: $e");
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 
   // --- XỬ LÝ DỮ LIỆU AN TOÀN (Helper) ---
@@ -260,6 +366,8 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/leaderboard/overall'), headers: headers);
+
+      final responseBody = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -280,17 +388,31 @@ class ApiService {
   }
 
   // --- CỬA HÀNG (SHOP) ---
-  Future<List<dynamic>> getShopItems() async {
+  Future<ApiResponse<List<dynamic>>> getShopItems() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/shop/items'), headers: headers);
+      
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        return _parseListResponse(jsonDecode(response.body));
+        return ApiResponse.success(
+          _parseListResponse(responseBody),
+          message: 'Lấy danh sách vật phẩm thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải danh sách vật phẩm';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print("Lỗi getShopItems: $e");
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 
   Future<ApiResponse<bool>> buyItem(String itemId) async {
@@ -315,6 +437,8 @@ class ApiService {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/lessons'), headers: headers);
 
+      final responseBody = jsonDecode(response.body);
+
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
         return ApiResponse.success(List<dynamic>.from(json['data'] ?? []));
@@ -335,26 +459,43 @@ class ApiService {
     return url;
   }
 
-  Future<List<dynamic>> getDecks() async {
+  Future<ApiResponse<List<dynamic>>> getDecks() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/decks/browse'), headers: headers);
+      
+      final responseBody = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json['data'] != null && json['data']['decks'] != null) {
-          return List<dynamic>.from(json['data']['decks']);
+        List<dynamic> decks = [];
+        if (responseBody['data'] != null && responseBody['data']['decks'] != null) {
+          decks = List<dynamic>.from(responseBody['data']['decks']);
         }
+        return ApiResponse.success(
+          decks,
+          message: 'Lấy danh sách bộ thẻ thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải danh sách bộ thẻ';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 
   Future<ApiResponse<List<Flashcard>>> getFlashcardsByDeck(String deckId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/decks/$deckId/flashcards'), headers: headers);
+
+      final responseBody = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -383,47 +524,107 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/lessons/$id'), headers: headers);
-      if (response.statusCode == 200) return jsonDecode(response.body)['data'];
+      
+      final responseBody = jsonDecode(response.body);
+      
+      if (response.statusCode == 200) {
+        return ApiResponse.success(
+          responseBody['data'] ?? {},
+          message: 'Lấy chi tiết bài học thành công',
+        );
+      }
+      
+      final errorMessage = responseBody['message'] ?? 'Không tìm thấy bài học';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return null;
   }
 
-  Future<List<dynamic>> getVocabulariesByLesson(String lessonId) async {
+  Future<ApiResponse<List<dynamic>>> getVocabulariesByLesson(String lessonId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/lessons/$lessonId/vocabularies'), headers: headers);
-      if (response.statusCode == 200) return List<dynamic>.from(jsonDecode(response.body)['data']);
+      
+      final responseBody = jsonDecode(response.body);
+      
+      if (response.statusCode == 200) {
+        return ApiResponse.success(
+          List<dynamic>.from(responseBody['data'] ?? []),
+          message: 'Lấy danh sách từ vựng thành công',
+        );
+      }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải từ vựng';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 
-  Future<List<dynamic>> getExercisesByLesson(String lessonId) async {
+  Future<ApiResponse<List<dynamic>>> getExercisesByLesson(String lessonId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/lessons/$lessonId/exercises'), headers: headers);
-      if (response.statusCode == 200) return List<dynamic>.from(jsonDecode(response.body)['data']);
+      
+      final responseBody = jsonDecode(response.body);
+      
+      if (response.statusCode == 200) {
+        return ApiResponse.success(
+          List<dynamic>.from(responseBody['data'] ?? []),
+          message: 'Lấy danh sách bài tập thành công',
+        );
+      }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải bài tập';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print(e);
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 
-  Future<List<dynamic>> getNotifications() async {
+  Future<ApiResponse<List<dynamic>>> getNotifications() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/notifications'), headers: headers);
 
+      final responseBody = jsonDecode(response.body);
+
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        return List<dynamic>.from(json['data'] ?? []);
+        return ApiResponse.success(
+          List<dynamic>.from(responseBody['data'] ?? []),
+          message: 'Lấy danh sách thông báo thành công',
+        );
       }
+      
+      final errorMessage = responseBody['message'] ?? 'Không thể tải thông báo';
+      return ApiResponse.failure(
+        errorMessage,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
-      print("Lỗi tải thông báo: $e");
+      return ApiResponse.failure(
+        'Lỗi kết nối: ${e.toString()}',
+        statusCode: 0,
+      );
     }
-    return [];
   }
 }

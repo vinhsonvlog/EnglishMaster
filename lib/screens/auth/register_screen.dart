@@ -245,7 +245,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 24, letterSpacing: 8),
           decoration: InputDecoration(
-            hintText: "******",
+            hintText: "######",
             counterText: "",
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -275,16 +275,5 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ],
     );
-  }
-
-  @override
-  void dispose() {
-    // Giải phóng tất cả các controller
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _ageController.dispose();
-    _otpController.dispose();
-    super.dispose();
   }
 }

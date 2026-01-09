@@ -28,13 +28,15 @@ class _ShopScreenState extends State<ShopScreen> {
       final results = await Future.wait([itemsFuture, profileFuture]);
 
       if (mounted) {
+        final itemsResponse = results[0]; // ApiResponse<List<dynamic>>
+        final profileResponse = results[1]; // ApiResponse<Map<String, dynamic>>
+        
         setState(() {
           _items = results[0] as List<dynamic>;
           final profile = results[1] as Map<String, dynamic>;
           // Xử lý data user profile linh hoạt
           final userData = profile['data'] ?? profile;
 
-          // Lấy gems, hỗ trợ cả cấu trúc cũ (user.gem) và mới (user.gems.amount)
           if (userData['gems'] is Map) {
             _userGems = userData['gems']['amount'] ?? 0;
           } else {
@@ -51,12 +53,10 @@ class _ShopScreenState extends State<ShopScreen> {
     }
   }
 
-  // Hàm tiện ích để lấy giá an toàn
   int _getItemPrice(dynamic item) {
     if (item['price'] != null && item['price']['gems'] != null) {
       return int.tryParse(item['price']['gems'].toString()) ?? 0;
     }
-    // Fallback cho trường hợp dữ liệu cũ dùng 'cost'
     return int.tryParse(item['cost']?.toString() ?? '0') ?? 0;
   }
 
@@ -92,7 +92,10 @@ class _ShopScreenState extends State<ShopScreen> {
           });
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Mua thành công!"), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text(response.message ?? "Mua thành công!"), 
+              backgroundColor: Colors.green
+            ),
           );
         } else {
           if (!mounted) return;
