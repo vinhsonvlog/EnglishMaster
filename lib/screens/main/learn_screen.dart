@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:englishmaster/services/api_service.dart';
 import 'package:englishmaster/screens/lesson/lesson_screen.dart';
 
+import '../../models/api_response.dart';
+
 // Enum trạng thái bài học
 enum LessonStatus { locked, unlocked, current, completed }
 
@@ -86,65 +88,76 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
     setState(() => _isLoading = true);
     try {
       final results = await Future.wait([
-        _apiService.getLessons(),      // [0]
-        _apiService.getUserProgress(), // [1]
-        _apiService.getUserProfile(),  // [2]
+        _apiService.getLessons(),
+        _apiService.getUserProgress(),
+        _apiService.getUserProfile(),
       ]);
 
       if (!mounted) return;
 
-      var rawLessons = results[0] as List<dynamic>;
-      var progress = results[1] as Map<String, dynamic>;
-      var profile = (results[2] as Map<String, dynamic>)['data'] ?? results[2];
+      // Lấy đối tượng ApiResponse từ kết quả
+      final lessonRes = results[0] as ApiResponse<List<dynamic>>;
+      final progressRes = results[1] as ApiResponse<Map<String, dynamic>>;
+      final profileRes = results[2] as ApiResponse<dynamic>;
 
-      // 1. Sắp xếp tất cả bài học trước
-      rawLessons.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
+      // Kiểm tra nếu tất cả API gọi thành công
+      if (lessonRes.success && progressRes.success && profileRes.success) {
+        var rawLessons = lessonRes.data ?? [];
+        var progress = progressRes.data ?? {};
 
-      // 2. LỌC DỮ LIỆU: Chỉ lấy Lesson của Unit 1 (Bỏ .take(3) để lấy hết)
-      var filteredLessons = rawLessons.where((lesson) {
-        String unitTitle = "";
-        if (lesson['unit'] != null && lesson['unit'] is Map) {
-          unitTitle = lesson['unit']['title']?.toString() ?? "";
-        } else {
-          unitTitle = "Unit ${lesson['unit'] ?? 1}";
-        }
-        return unitTitle.contains("1");
-      }).toList();
+        // Xử lý dữ liệu profile (vì backend của bạn có thể bọc trong trường 'data')
+        var profileData = profileRes.data;
+        var profile = (profileData is Map && profileData.containsKey('data'))
+            ? profileData['data']
+            : profileData;
 
-      // 3. Xác định Current Lesson ID (Logic giống React)
-      List<dynamic> completedIds = progress['completedLessons'] ?? [];
-      String? currentId = progress['currentLesson'];
+        // 1. Sắp xếp bài học
+        rawLessons.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
 
-      // Nếu backend chưa trả về currentLesson, tìm bài đầu tiên chưa học trong Unit 1
-      if (currentId == null || currentId.isEmpty) {
-        for (var lesson in filteredLessons) {
-          if (!completedIds.contains(lesson['_id'])) {
-            currentId = lesson['_id'];
-            break;
+        // 2. Lọc dữ liệu Unit 1
+        var filteredLessons = rawLessons.where((lesson) {
+          String unitTitle = "";
+          if (lesson['unit'] != null && lesson['unit'] is Map) {
+            unitTitle = lesson['unit']['title']?.toString() ?? "";
+          } else {
+            unitTitle = "Unit ${lesson['unit'] ?? 1}";
+          }
+          return unitTitle.contains("1");
+        }).toList();
+
+        // 3. Xác định bài học hiện tại
+        List<dynamic> completedIds = progress['completedLessons'] ?? [];
+        String? currentId = progress['currentLesson'];
+
+        if (currentId == null || currentId.isEmpty) {
+          for (var lesson in filteredLessons) {
+            if (!completedIds.contains(lesson['_id'])) {
+              currentId = lesson['_id'];
+              break;
+            }
           }
         }
-        // Nếu đã học hết unit 1, có thể currentId sẽ null (hoặc bài cuối)
+
+        setState(() {
+          _units = [{
+            'id': 'unit1',
+            'title': 'Unit 1',
+            'description': 'Cơ bản',
+            'order': 1,
+            'lessons': filteredLessons,
+            'color': _LearnStyles.unit1Color,
+            'shadowColor': _LearnStyles.unit1Shadow,
+          }];
+          _userProgress = progress;
+          _userProfile = profile ?? {};
+          _calculatedCurrentLessonId = currentId;
+          _isLoading = false;
+        });
+      } else {
+        // Xử lý khi có lỗi từ server (ví dụ: in thông báo lỗi)
+        print("Lỗi API: ${lessonRes.message ?? progressRes.message ?? profileRes.message}");
+        setState(() => _isLoading = false);
       }
-
-      // 4. Tạo Object Unit 1 duy nhất
-      Map<String, dynamic> unit1 = {
-        'id': 'unit1',
-        'title': 'Unit 1',
-        'description': 'Cơ bản',
-        'order': 1,
-        'lessons': filteredLessons,
-        'color': _LearnStyles.unit1Color,
-        'shadowColor': _LearnStyles.unit1Shadow,
-      };
-
-      setState(() {
-        _units = [unit1]; // Chỉ hiển thị 1 Unit
-        _userProgress = progress;
-        _userProfile = profile;
-        _calculatedCurrentLessonId = currentId;
-        _isLoading = false;
-      });
-
     } catch (e) {
       print("Lỗi tải dữ liệu LearnScreen: $e");
       if (mounted) setState(() => _isLoading = false);
@@ -260,7 +273,7 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
                 decoration: BoxDecoration(
                     border: Border.all(color: Colors.white, width: 2),
                     borderRadius: BorderRadius.circular(12),
-                    color: Colors.white.withOpacity(0.2)
+                    color: Colors.white.withValues(alpha: 0.2)
                 ),
                 child: const Row(
                   children: [
@@ -386,7 +399,7 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
             ),
             if (isCurrent)
               BoxShadow(
-                  color: _LearnStyles.unit1Color.withOpacity(0.4),
+                  color: _LearnStyles.unit1Color.withValues(alpha: 0.4),
                   blurRadius: 20,
                   spreadRadius: 2
               )
@@ -449,7 +462,7 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: _LearnStyles.unit1Shadow),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0,2), blurRadius: 4)]
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), offset: const Offset(0,2), blurRadius: 4)]
                 ),
                 child: const Text("BẮT ĐẦU", style: TextStyle(color: _LearnStyles.unit1Color, fontWeight: FontWeight.bold, fontSize: 12)),
               ),
