@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:englishmaster/config/colors.dart';
 import 'package:englishmaster/models/flashcard.dart';
 import 'package:englishmaster/services/api_service.dart';
+import '../../models/api_response.dart';
 
 class QuizScreen extends StatefulWidget {
   final String deckId;
@@ -16,7 +17,7 @@ class QuizScreen extends StatefulWidget {
 
 class _QuizScreenState extends State<QuizScreen> {
   final ApiService _apiService = ApiService();
-  late Future<List<Flashcard>> _flashcardsFuture;
+  late Future<ApiResponse<List<Flashcard>>> _flashcardsFuture;
 
   int _currentIndex = 0;
   bool _isFlipped = false;
@@ -88,11 +89,13 @@ class _QuizScreenState extends State<QuizScreen> {
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(6.0),
-          child: FutureBuilder<List<Flashcard>>(
+          child: FutureBuilder<ApiResponse<List<Flashcard>>>(
             future: _flashcardsFuture,
             builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox();
-              double progress = (_currentIndex + 1) / snapshot.data!.length;
+              // Kiểm tra thêm điều kiện .success và lấy dữ liệu từ .data
+              if (!snapshot.hasData || !snapshot.data!.success || snapshot.data!.data!.isEmpty)
+                return const SizedBox();
+              double progress = (_currentIndex + 1) / snapshot.data!.data!.length; // Sửa snapshot.data!.data!
               return LinearProgressIndicator(
                 value: progress,
                 backgroundColor: Colors.grey[200],
@@ -103,18 +106,26 @@ class _QuizScreenState extends State<QuizScreen> {
           ),
         ),
       ),
-      body: FutureBuilder<List<Flashcard>>(
+      body: FutureBuilder<ApiResponse<List<Flashcard>>>(
         future: _flashcardsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-          } else if (snapshot.hasError) {
-            return Center(child: Text("Lỗi kết nối: ${snapshot.error}"));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          }
+
+          // Kiểm tra lỗi kết nối hoặc lỗi từ Server
+          if (snapshot.hasError || (snapshot.hasData && !snapshot.data!.success)) {
+            String errorMsg = snapshot.data?.message ?? snapshot.error.toString();
+            return Center(child: Text("Lỗi: $errorMsg"));
+          }
+
+          // Kiểm tra nếu không có dữ liệu
+          if (!snapshot.hasData || snapshot.data!.data == null || snapshot.data!.data!.isEmpty) {
             return _buildEmptyState();
           }
 
-          final flashcards = snapshot.data!;
+          // LẤY DANH SÁCH THẺ TỪ .data!.data!
+          final flashcards = snapshot.data!.data!;
           final currentCard = flashcards[_currentIndex];
 
           return Column(
@@ -240,7 +251,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           elevation: 4,
-                          shadowColor: AppColors.primary.withOpacity(0.4),
+                          shadowColor: AppColors.primary.withValues(alpha: 0.4),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
                         child: const Text("ĐÃ THUỘC", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -287,10 +298,10 @@ class _QuizScreenState extends State<QuizScreen> {
 
     // Tạo shadow nhẹ nhàng
     List<BoxShadow> shadows = [
-      BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, 8), blurRadius: 16)
+      BoxShadow(color: Colors.black.withValues(alpha: 0.05), offset: const Offset(0, 8), blurRadius: 16)
     ];
 
-    Border? border = isBack ? Border.all(color: AppColors.primary.withOpacity(0.2), width: 2) : null;
+    Border? border = isBack ? Border.all(color: AppColors.primary.withValues(alpha: 0.2), width: 2) : null;
 
     return Container(
       key: ValueKey(isBack),
@@ -309,7 +320,7 @@ class _QuizScreenState extends State<QuizScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isBack ? Colors.grey.shade100 : AppColors.primary.withOpacity(0.1),
+              color: isBack ? Colors.grey.shade100 : AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(

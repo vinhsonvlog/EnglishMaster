@@ -20,16 +20,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Future<void> _loadData() async {
-    try {
-      final data = await _apiService.getLeaderboard();
-      if (mounted) {
-        setState(() {
-          _users = data;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+    // Gọi API - kết quả trả về là ApiResponse
+    final result = await _apiService.getLeaderboard();
+
+    if (mounted) {
+      setState(() {
+        if (result.success) {
+          // Nếu thành công, lấy dữ liệu từ result.data (là List<dynamic>)
+          _users = result.data ?? [];
+        } else {
+          // Nếu thất bại, bạn có thể hiển thị thông báo lỗi từ server
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message ?? "Không thể tải bảng xếp hạng"),
+              backgroundColor: Colors.red,
+            ),
+          );
+          _users = []; // Đảm bảo danh sách rỗng nếu lỗi
+        }
+        _isLoading = false;
+      });
     }
   }
 
@@ -57,7 +67,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   Icon(
                     Icons.emoji_events_outlined,
                     size: 80,
-                    color: Colors.orange.withOpacity(0.5),
+                    color: Colors.orange.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   const Text(

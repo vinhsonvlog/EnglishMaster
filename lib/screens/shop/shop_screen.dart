@@ -32,7 +32,7 @@ class _ShopScreenState extends State<ShopScreen> {
           _items = results[0] as List<dynamic>;
           final profile = results[1] as Map<String, dynamic>;
           // Xử lý data user profile linh hoạt
-          final userData = profile['data'] != null ? profile['data'] : profile;
+          final userData = profile['data'] ?? profile;
 
           // Lấy gems, hỗ trợ cả cấu trúc cũ (user.gem) và mới (user.gems.amount)
           if (userData['gems'] is Map) {
@@ -46,7 +46,7 @@ class _ShopScreenState extends State<ShopScreen> {
         });
       }
     } catch (e) {
-      print("Lỗi tải shop: $e");
+      debugPrint("Lỗi tải shop: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -84,8 +84,9 @@ class _ShopScreenState extends State<ShopScreen> {
 
     if (confirm == true) {
       try {
-        bool success = await _apiService.buyItem(item['_id']);
-        if (success) {
+        final result = await _apiService.buyItem(item['_id']);
+
+        if (result.success && result.data == true) {
           setState(() {
             _userGems -= price;
           });
@@ -94,10 +95,11 @@ class _ShopScreenState extends State<ShopScreen> {
             const SnackBar(content: Text("Mua thành công!"), backgroundColor: Colors.green),
           );
         } else {
-          // Nếu hàm buyItem trả về false
           if (!mounted) return;
+          // Hiển thị message lỗi cụ thể từ Server (Vd: "Vật phẩm không tồn tại")
+          String errorMsg = result.message ?? "Lỗi khi mua vật phẩm";
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Lỗi khi mua vật phẩm"), backgroundColor: Colors.red),
+            SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
           );
         }
       } catch (e) {

@@ -25,25 +25,34 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
+
     setState(() => _isLoading = true);
+
+    // Gọi API - Bây giờ result là kiểu ApiResponse<dynamic>
     final result = await _apiService.login(
         _emailController.text.trim(),
         _passwordController.text.trim()
     );
+
     setState(() => _isLoading = false);
 
-    if (result != null && result['error'] == null) {
+    // KIỂM TRA DỰA TRÊN THUỘC TÍNH .success
+    if (result.success) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Đăng nhập thành công!"), backgroundColor: Colors.green),
       );
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const MainScreen()),
             (route) => false,
       );
     } else {
-      String message = result?['error'] ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại.';
+      // LẤY THÔNG BÁO LỖI TỪ THUỘC TÍNH .message
+      String message = result.message ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại.';
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: Colors.red),

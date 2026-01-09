@@ -67,41 +67,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // Bước 1: Tắt bàn phím ngay lập tức
     FocusScope.of(context).unfocus();
-
     setState(() => _isLoading = true);
 
-    try {
-      final result = await _apiService.verifyOtp(
-        _emailController.text,
-        _otpController.text,
-      );
+    // Gọi API Verify OTP
+    final result = await _apiService.verifyOtp(
+      _emailController.text,
+      _otpController.text,
+    );
 
-      setState(() => _isLoading = false);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-      if (result != null && result['error'] != null) {
-        _showSnack(result['error'], Colors.red);
-        return;
-      }
-
-      if (!mounted) return;
-
+    if (result.success) {
       _showSnack('Xác thực thành công! Tài khoản đã được kích hoạt.', Colors.green);
 
-      // Bước 2: Đợi một chút để bàn phím hạ xuống hoàn toàn và Snack bar kịp hiển thị
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (mounted) {
-        // Sử dụng Navigator.of(context).pop() thay vì Navigator.pop(context)
-        // để đảm bảo context đúng cấp
-        Navigator.of(context).pop();
-      }
-
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showSnack('Lỗi kết nối: ${e.toString()}', Colors.red);
+      // Đợi chút cho snackbar hiển thị rồi quay về màn hình Login
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (mounted) Navigator.of(context).pop();
+    } else {
+      // Hiển thị lỗi từ server (Ví dụ: "Mã OTP không đúng hoặc đã hết hạn")
+      _showSnack(result.message ?? 'Xác thực thất bại', Colors.red);
     }
   }
 

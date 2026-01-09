@@ -46,29 +46,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
     try {
-      final response = await _apiService.getUserProfile();
+      // result bây giờ là kiểu ApiResponse<dynamic>
+      final result = await _apiService.getUserProfile();
 
       if (mounted) {
         setState(() {
-          // Xử lý cấu trúc dữ liệu trả về từ API
-          var data = response['data'] ?? response;
+          if (result.success && result.data != null) {
+            // result.data chính là Map chứa thông tin từ Server
+            var responseBody = result.data;
 
-          if (data['user'] != null && data['user'] is Map) {
-            _userData = data['user'];
+            // Kiểm tra cấu trúc: { "data": { "user": ... } } hoặc { "user": ... }
+            var data = responseBody['data'] ?? responseBody;
+
+            if (data['user'] != null && data['user'] is Map) {
+              _userData = data['user'];
+            } else {
+              _userData = data;
+            }
           } else {
-            _userData = data;
+            // Xử lý khi API trả về success: false
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(result.message ?? "Không thể tải thông tin cá nhân")),
+            );
           }
-
           _isLoading = false;
         });
       }
     } catch (e) {
       print("Lỗi tải profile: $e");
-      if (e.toString().contains("401")) {
-        _performLogout();
-      } else {
-        if (mounted) setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -267,7 +273,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
@@ -282,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   image: (avatarUrl != null && avatarUrl.isNotEmpty)
                       ? DecorationImage(image: NetworkImage(ApiService.getValidImageUrl(avatarUrl)), fit: BoxFit.cover)
                       : null,
-                  boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
                 ),
                 child: (avatarUrl == null || avatarUrl.isEmpty)
                     ? Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue)))
@@ -422,7 +428,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))],
           ),
           child: Row(
             children: [
@@ -431,7 +437,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   gradient: LinearGradient(
-                      colors: [(item['color'] as Color).withOpacity(0.8), item['color']],
+                      colors: [(item['color'] as Color).withValues(alpha: 0.8), item['color']],
                       begin: Alignment.topLeft, end: Alignment.bottomRight
                   ),
                 ),
@@ -509,7 +515,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Get.snackbar(
           "Thành công",
           "Đã đặt lịch nhắc học vào 20:00 hàng ngày!",
-          backgroundColor: Colors.green.withOpacity(0.2),
+          backgroundColor: Colors.green.withValues(alpha: 0.2),
           snackPosition: SnackPosition.TOP
       );
     }

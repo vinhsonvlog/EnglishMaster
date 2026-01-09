@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:englishmaster/models/flashcard.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import '../models/api_response.dart';
+import 'api_handler.dart';
 
 class ApiService {
   // Chọn IP phù hợp:
@@ -21,8 +21,7 @@ class ApiService {
   }
 
   // --- AUTHENTICATION ---
-
-  Future<dynamic> register(String name, String email, String password, String age) async {
+  Future<ApiResponse<dynamic>> register(String name, String email, String password, String age) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
@@ -35,28 +34,26 @@ class ApiService {
         }),
       );
 
-      final responseBody = jsonDecode(response.body);
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return responseBody;
+        return ApiResponse.success(jsonDecode(response.body));
       }
-      return {'error': responseBody['message'] ?? 'Đăng ký thất bại'};
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      return {'error': e.toString()};
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
   }
 
-  Future<dynamic> verifyOtp(String email, String otp) async {
+  Future<ApiResponse<dynamic>> verifyOtp(String email, String otp) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/verify-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'otp': otp}),
       );
-      final responseBody = jsonDecode(response.body);
-      if (response.statusCode == 200) return responseBody;
-      return {'error': responseBody['message'] ?? 'Mã OTP không đúng'};
+      if (response.statusCode == 200) return ApiResponse.success(jsonDecode(response.body));
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      return {'error': e.toString()};
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
   }
 
@@ -77,7 +74,7 @@ class ApiService {
     }
   }
 
-  Future<dynamic> login(String email, String password) async {
+  Future<ApiResponse<dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
@@ -87,34 +84,28 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['requires2FA'] == true) return data;
-
-        final prefs = await SharedPreferences.getInstance();
-        final token = data['token'];
-        if (token != null) {
-          await prefs.setString('token', token);
-          if (data['user'] != null && data['user'] is Map) {
-            await prefs.setString('userId', data['user']['_id'] ?? data['user']['id'] ?? '');
-            await prefs.setString('username', data['user']['name'] ?? '');
+        if (data['requires2FA'] != true) {
+          final prefs = await SharedPreferences.getInstance();
+          final token = data['token'];
+          if (token != null) {
+            await prefs.setString('token', token);
+            if (data['user'] != null) {
+              await prefs.setString('userId', data['user']['_id'] ?? data['user']['id'] ?? '');
+              await prefs.setString('username', data['user']['name'] ?? '');
+            }
           }
         }
-        return data;
-      } else {
-        final body = jsonDecode(response.body);
-        return {'error': body['message'] ?? 'Đăng nhập thất bại'};
+        return ApiResponse.success(data);
       }
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      return {'error': e.toString()};
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
   }
 
   Future<void> logout() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
-    } catch (e) {
-      print(e);
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
   }
 
   // --- QUÊN MẬT KHẨU ---
@@ -160,20 +151,19 @@ class ApiService {
   }
 
   // --- PROGRESS ---
-
-  Future<Map<String, dynamic>> getUserProgress() async {
+  Future<ApiResponse<Map<String, dynamic>>> getUserProgress() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/progress'), headers: headers);
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        return json['data'] ?? {};
+        return ApiResponse.success(Map<String, dynamic>.from(json['data'] ?? {}));
       }
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      print(e);
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
-    return {'completedLessons': [], 'currentLesson': null};
   }
 
   // --- LUYỆN TẬP & KIỂM TRA ---
@@ -266,16 +256,14 @@ class ApiService {
   }
 
   // --- XẾP HẠNG (LEADERBOARD) ---
-  Future<List<dynamic>> getLeaderboard() async {
+  Future<ApiResponse<List<dynamic>>> getLeaderboard() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/leaderboard/overall'), headers: headers);
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        final list = json['data'] as List;
-
-        return list.map((item) {
+        final list = (json['data'] as List).map((item) {
           final userInfo = item['user'] ?? {};
           return {
             'name': userInfo['name'] ?? userInfo['username'] ?? 'Người dùng',
@@ -283,11 +271,12 @@ class ApiService {
             'xp': item['xpTotal'] ?? 0,
           };
         }).toList();
+        return ApiResponse.success(list);
       }
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      print("Lỗi getLeaderboard: $e");
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
-    return [];
   }
 
   // --- CỬA HÀNG (SHOP) ---
@@ -304,7 +293,7 @@ class ApiService {
     return [];
   }
 
-  Future<bool> buyItem(String itemId) async {
+  Future<ApiResponse<bool>> buyItem(String itemId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.post(
@@ -312,33 +301,31 @@ class ApiService {
           headers: headers,
           body: jsonEncode({'itemId': itemId})
       );
-      return response.statusCode == 200;
+      if (response.statusCode == 200) return ApiResponse.success(true);
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      print(e);
-      return false;
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
   }
 
 
   // --- LESSONS ---
-
-  Future<List<dynamic>> getLessons() async {
+  Future<ApiResponse<List<dynamic>>> getLessons() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/lessons'), headers: headers);
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        return List<dynamic>.from(json['data']);
+        return ApiResponse.success(List<dynamic>.from(json['data'] ?? []));
       }
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      print(e);
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
-    return [];
   }
 
   // --- FLASHCARDS & PROFILE ---
-
   static String getValidImageUrl(String? url) {
     if (url == null || url.isEmpty) return "";
     if (!url.startsWith('http')) {
@@ -364,40 +351,34 @@ class ApiService {
     return [];
   }
 
-  Future<List<Flashcard>> getFlashcardsByDeck(String deckId) async {
+  Future<ApiResponse<List<Flashcard>>> getFlashcardsByDeck(String deckId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/decks/$deckId/flashcards'), headers: headers);
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        if (json['data'] != null && json['data']['flashcards'] != null) {
-          final List<dynamic> list = json['data']['flashcards'];
-          return list.map((item) => Flashcard.fromJson(item)).toList();
-        }
+        final List<dynamic> list = json['data']['flashcards'] ?? [];
+        return ApiResponse.success(list.map((item) => Flashcard.fromJson(item)).toList());
       }
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      print(e);
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
-    return [];
   }
 
-  Future<dynamic> getUserProfile() async {
+  Future<ApiResponse<dynamic>> getUserProfile() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrl/users/profile'), headers: headers);
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
+      if (response.statusCode == 200) return ApiResponse.success(jsonDecode(response.body));
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
     } catch (e) {
-      print(e);
+      return ApiResponse.error(ApiHandler.handleException(e));
     }
-    return null;
   }
 
   // --- LESSON DETAILS ---
-
   Future<dynamic> getLessonById(String id) async {
     try {
       final headers = await _getHeaders();
