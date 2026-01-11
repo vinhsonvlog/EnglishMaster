@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:englishmaster/services/api_service.dart';
+import 'package:get/get.dart';
+import 'package:englishmaster/controllers/user_controller.dart';
 
 class ShopScreen extends StatefulWidget {
   const ShopScreen({super.key});
@@ -10,38 +12,23 @@ class ShopScreen extends StatefulWidget {
 
 class _ShopScreenState extends State<ShopScreen> {
   final ApiService _apiService = ApiService();
+  final UserController userController = Get.find<UserController>();
   List<dynamic> _items = [];
   bool _isLoading = true;
-  int _userGems = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadShopItems();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadShopItems() async {
     try {
-      final itemsFuture = _apiService.getShopItems();
-      final profileFuture = _apiService.getUserProfile();
-
-      final results = await Future.wait([itemsFuture, profileFuture]);
+      final items = await _apiService.getShopItems();
 
       if (mounted) {
         setState(() {
-          _items = results[0] as List<dynamic>;
-          final profile = results[1] as Map<String, dynamic>;
-          // Xử lý data user profile linh hoạt
-          final userData = profile['data'] ?? profile;
-
-          // Lấy gems, hỗ trợ cả cấu trúc cũ (user.gem) và mới (user.gems.amount)
-          if (userData['gems'] is Map) {
-            _userGems = userData['gems']['amount'] ?? 0;
-          } else {
-            _userGems = int.tryParse(userData['gems']?.toString() ?? '') ??
-                int.tryParse(userData['gem']?.toString() ?? '') ?? 0;
-          }
-
+          _items = items;
           _isLoading = false;
         });
       }
@@ -63,7 +50,7 @@ class _ShopScreenState extends State<ShopScreen> {
   Future<void> _handleBuy(dynamic item) async {
     final int price = _getItemPrice(item);
 
-    if (_userGems < price) {
+    if (userController.gems < price) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Bạn không đủ đá quý!")),
       );
@@ -87,9 +74,26 @@ class _ShopScreenState extends State<ShopScreen> {
         final result = await _apiService.buyItem(item['_id']);
 
         if (result.success && result.data == true) {
-          setState(() {
-            _userGems -= price;
-          });
+          // Trừ gems
+          userController.decreaseGems(price);
+          
+          // Nếu mua item hearts thì tăng số hearts
+          String itemName = item['name']?.toString() ?? '';
+          if (itemName.contains('Trái Tim') || itemName.toLowerCase().contains('heart')) {
+            // Tính số hearts tăng dựa vào tên item
+            int heartsToAdd = 1; // Mặc định
+            
+            // Kiểm tra "5 Trái Tim" trước
+            if (itemName.startsWith('5')) {
+              heartsToAdd = 5;
+            } else if (itemName.startsWith('1')) {
+              heartsToAdd = 1;
+            }
+            
+            userController.increaseHearts(heartsToAdd);
+            print('💖 Mua $itemName - Tăng $heartsToAdd hearts');
+          }
+          
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Mua thành công!"), backgroundColor: Colors.green),
@@ -120,7 +124,7 @@ class _ShopScreenState extends State<ShopScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          Container(
+          Obx(() => Container(
             margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(20)),
@@ -128,10 +132,10 @@ class _ShopScreenState extends State<ShopScreen> {
               children: [
                 const Icon(Icons.diamond, color: Colors.blue, size: 20),
                 const SizedBox(width: 4),
-                Text("$_userGems", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                Text("${userController.gems}", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
               ],
             ),
-          )
+          ))
         ],
       ),
       body: _isLoading
@@ -144,7 +148,7 @@ class _ShopScreenState extends State<ShopScreen> {
             Icon(Icons.storefront_outlined, size: 80, color: Colors.grey[300]),
             const SizedBox(height: 16),
             const Text("Cửa hàng đang trống", style: TextStyle(color: Colors.grey, fontSize: 18)),
-            TextButton(onPressed: _loadData, child: const Text("Tải lại")),
+            TextButton(onPressed: _loadShopItems, child: const Text("Tải lại")),
           ],
         ),
       )

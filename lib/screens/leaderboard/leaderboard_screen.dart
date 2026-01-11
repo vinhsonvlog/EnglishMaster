@@ -102,7 +102,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         final user = _users[index + 3];
                         return ListTile(
                           leading: SizedBox(
-                            width: 70, // Đặt chiều rộng cố định
+                            width: 75, // Tăng từ 70 lên 75 để tránh overflow
                             child: Row(
                               children: [
                                 Text(

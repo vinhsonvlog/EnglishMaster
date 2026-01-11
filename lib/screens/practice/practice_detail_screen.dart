@@ -14,7 +14,6 @@ class PracticeDetailScreen extends StatefulWidget {
 class _PracticeDetailScreenState extends State<PracticeDetailScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
-  dynamic _practiceData;
   List<dynamic> _questions = [];
 
   @override
@@ -28,7 +27,6 @@ class _PracticeDetailScreenState extends State<PracticeDetailScreen> {
       final data = await _apiService.getPracticeExerciseById(widget.practiceId);
       if (mounted) {
         setState(() {
-          _practiceData = data;
           _questions = data['questions'] ?? [];
           _isLoading = false;
         });

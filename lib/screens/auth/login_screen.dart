@@ -4,6 +4,8 @@ import 'package:englishmaster/services/api_service.dart';
 import 'package:englishmaster/screens/main_screen.dart';
 import 'package:englishmaster/screens/auth/register_screen.dart';
 import 'package:englishmaster/screens/auth/forgot_password_screen.dart';
+import 'package:get/get.dart';
+import 'package:englishmaster/controllers/user_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -39,6 +41,9 @@ class _LoginScreenState extends State<LoginScreen> {
     // KIỂM TRA DỰA TRÊN THUỘC TÍNH .success
     if (result.success) {
       if (!mounted) return;
+
+      // Khởi tạo UserController sau khi login thành công
+      Get.put(UserController());
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Đăng nhập thành công!"), backgroundColor: Colors.green),

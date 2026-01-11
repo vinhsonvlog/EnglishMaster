@@ -19,10 +19,8 @@ class Flashcard {
     return Flashcard(
       id: json['_id'] ?? '',
 
-      // QUAN TRỌNG: Backend trả về 'front', ta map vào 'term'
       term: json['front'] ?? json['term'] ?? 'Không có từ',
 
-      // QUAN TRỌNG: Backend trả về 'back', ta map vào 'definition'
       definition: json['back'] ?? json['definition'] ?? 'Không có nghĩa',
 
       example: json['example'],

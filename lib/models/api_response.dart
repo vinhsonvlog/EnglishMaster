@@ -9,7 +9,6 @@ class ApiResponse<T> {
     this.message,
   });
 
-  // Factory để tạo object khi thành công
   factory ApiResponse.success(T data, {String? message}) {
     return ApiResponse(
       success: true,
@@ -18,7 +17,6 @@ class ApiResponse<T> {
     );
   }
 
-  // Factory để tạo object khi thất bại
   factory ApiResponse.error(String message) {
     return ApiResponse(
       success: false,

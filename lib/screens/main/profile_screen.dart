@@ -4,6 +4,8 @@ import 'package:englishmaster/screens/auth/login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get/get.dart';
 import 'package:englishmaster/services/notification_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class _ProfileColors {
   static const Color background = Color(0xFFF7F7F7);
@@ -33,9 +35,11 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final ApiService _apiService = ApiService();
   final NotificationService _notificationService = Get.find<NotificationService>();
+  final ImagePicker _picker = ImagePicker();
 
   Map<String, dynamic> _userData = {};
   bool _isLoading = true;
+  bool _isUploadingAvatar = false;
 
   @override
   void initState() {
@@ -73,8 +77,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      print("Lỗi tải profile: $e");
+      print("❌ Lỗi tải profile: $e");
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _changeAvatar() async {
+    final source = await showDialog<ImageSource>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Chọn ảnh'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Chụp ảnh'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Chọn từ thư viện'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+
+      if (image == null) return;
+
+      setState(() => _isUploadingAvatar = true);
+
+      final result = await _apiService.uploadAvatar(File(image.path));
+
+      if (!mounted) return;
+      setState(() => _isUploadingAvatar = false);
+
+      if (result.success) {
+        Get.snackbar(
+          'Thành công',
+          'Đã cập nhật ảnh đại diện',
+          backgroundColor: Colors.green.withValues(alpha: 0.2),
+          snackPosition: SnackPosition.TOP,
+        );
+        _loadProfile(); // Reload profile để cập nhật avatar mới
+      } else {
+        Get.snackbar(
+          'Lỗi',
+          result.message ?? 'Không thể tải ảnh lên',
+          backgroundColor: Colors.red.withValues(alpha: 0.2),
+          snackPosition: SnackPosition.TOP,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploadingAvatar = false);
+      Get.snackbar(
+        'Lỗi',
+        'Đã xảy ra lỗi: $e',
+        backgroundColor: Colors.red.withValues(alpha: 0.2),
+        snackPosition: SnackPosition.TOP,
+      );
     }
   }
 
@@ -156,15 +230,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Stats extraction
     int streak = 0;
     if (_userData['streak'] != null) {
-      streak = (_userData['streak'] is Map)
-          ? (_userData['streak']['count'] ?? 0)
-          : int.tryParse(_userData['streak'].toString()) ?? 0;
+      if (_userData['streak'] is Map) {
+        streak = _userData['streak']['count'] ?? 0;
+      } else {
+        streak = int.tryParse(_userData['streak'].toString()) ?? 0;
+      }
     }
 
-    int xp = int.tryParse(_userData['xp']?.toString() ?? '0') ?? 0;
+    // Parse XP - có thể là object {level: X, total: Y} hoặc số
+    int xp = 0;
+    if (_userData['xp'] != null) {
+      if (_userData['xp'] is Map) {
+        xp = _userData['xp']['total'] ?? 0;
+      } else {
+        xp = int.tryParse(_userData['xp'].toString()) ?? 0;
+      }
+    }
 
-    // Lấy gems, hỗ trợ cả key 'gems' và 'gem'
-    int gems = int.tryParse((_userData['gems'] ?? _userData['gem'] ?? '0').toString()) ?? 0;
+    // Parse Gems - có thể là object {amount: X} hoặc số
+    int gems = 0;
+    if (_userData['gems'] != null) {
+      if (_userData['gems'] is Map) {
+        gems = _userData['gems']['amount'] ?? 0;
+      } else {
+        gems = int.tryParse(_userData['gems'].toString()) ?? 0;
+      }
+    } else if (_userData['gem'] != null) {
+      if (_userData['gem'] is Map) {
+        gems = _userData['gem']['amount'] ?? 0;
+      } else {
+        gems = int.tryParse(_userData['gem'].toString()) ?? 0;
+      }
+    }
 
     int completedLessons = 0;
     if (_userData['progress'] != null && _userData['progress']['completedLessons'] != null) {
@@ -279,20 +376,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Row(
             children: [
-              // Avatar
-              Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.blue[50],
-                  image: (avatarUrl != null && avatarUrl.isNotEmpty)
-                      ? DecorationImage(image: NetworkImage(ApiService.getValidImageUrl(avatarUrl)), fit: BoxFit.cover)
-                      : null,
-                  boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
-                ),
-                child: (avatarUrl == null || avatarUrl.isEmpty)
-                    ? Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue)))
-                    : null,
+              // Avatar with camera button
+              Stack(
+                children: [
+                  Container(
+                    width: 80, height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.blue[50],
+                      image: (avatarUrl != null && avatarUrl.isNotEmpty)
+                          ? DecorationImage(image: NetworkImage(ApiService.getValidImageUrl(avatarUrl)), fit: BoxFit.cover)
+                          : null,
+                      boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
+                    ),
+                    child: (avatarUrl == null || avatarUrl.isEmpty)
+                        ? Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue)))
+                        : null,
+                  ),
+                  if (_isUploadingAvatar)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.5),
+                        ),
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: GestureDetector(
+                      onTap: _isUploadingAvatar ? null : _changeAvatar,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(width: 20),
 
@@ -498,26 +634,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
     );
   }
-    // Hàm test thông báo
-    void _testNotification() {
-      _notificationService.showNotification(
-        id: 1,
-        title: "Xin chào!",
-        body: "Đây là thông báo từ English Master.",
-      );
-    }
 
-    // Hàm bật nhắc nhở
-    void _enableDailyReminder() async {
-      await _notificationService.requestPermissions(); // Xin quyền trước
-      await _notificationService.scheduleDailyReminder();
+  // Hàm test thông báo
+  void _testNotification() {
+    _notificationService.showNotification(
+      id: 1,
+      title: "Xin chào!",
+      body: "Đây là thông báo từ English Master.",
+    );
+  }
 
-      Get.snackbar(
-          "Thành công",
-          "Đã đặt lịch nhắc học vào 20:00 hàng ngày!",
-          backgroundColor: Colors.green.withValues(alpha: 0.2),
-          snackPosition: SnackPosition.TOP
-      );
-    }
+  // Hàm bật nhắc nhở
+  void _enableDailyReminder() async {
+    await _notificationService.requestPermissions(); // Xin quyền trước
+    await _notificationService.scheduleDailyReminder();
+
+    Get.snackbar(
+        "Thành công",
+        "Đã đặt lịch nhắc học vào 20:00 hàng ngày!",
+        backgroundColor: Colors.green.withValues(alpha: 0.2),
+        snackPosition: SnackPosition.TOP
+    );
+  }
 
 }

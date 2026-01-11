@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:englishmaster/services/api_service.dart';
 import 'package:englishmaster/screens/lesson/lesson_screen.dart';
+import 'package:get/get.dart';
+import 'package:englishmaster/controllers/user_controller.dart';
 
 import '../../models/api_response.dart';
 
@@ -107,9 +109,27 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
 
         // Xử lý dữ liệu profile (vì backend của bạn có thể bọc trong trường 'data')
         var profileData = profileRes.data;
-        var profile = (profileData is Map && profileData.containsKey('data'))
-            ? profileData['data']
-            : profileData;
+        Map<String, dynamic> profile = {};
+        
+        if (profileData is Map) {
+          // Nếu có cấu trúc { "data": { "user": {...} } }
+          if (profileData.containsKey('data') && profileData['data'] is Map) {
+            var data = profileData['data'];
+            if (data.containsKey('user') && data['user'] is Map) {
+              profile = Map<String, dynamic>.from(data['user']);
+            } else {
+              profile = Map<String, dynamic>.from(data);
+            }
+          } 
+          // Nếu có cấu trúc { "user": {...} }
+          else if (profileData.containsKey('user') && profileData['user'] is Map) {
+            profile = Map<String, dynamic>.from(profileData['user']);
+          } 
+          // Fallback
+          else {
+            profile = Map<String, dynamic>.from(profileData);
+          }
+        }
 
         // 1. Sắp xếp bài học
         rawLessons.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
@@ -181,14 +201,11 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final UserController userController = Get.find<UserController>();
+    
     if (_isLoading) {
       return const Scaffold(backgroundColor: Colors.white, body: Center(child: CircularProgressIndicator()));
     }
-
-    // Stats an toàn
-    final streak = (_userProfile['streak'] is Map) ? _userProfile['streak']['count'] : (_userProfile['streak'] ?? 0);
-    final gems = _userProfile['gems'] ?? _userProfile['gem'] ?? 0;
-    final xp = _userProfile['xp'] ?? 0;
 
     return Scaffold(
       backgroundColor: _LearnStyles.background,
@@ -196,16 +213,16 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
         backgroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: Row(
+        title: Obx(() => Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             // Cờ (Dùng ảnh asset hoặc icon fallback)
             Image.asset('assets/images/US.png', width: 32, errorBuilder: (c,e,s) => const Icon(Icons.flag, color: Colors.grey)),
-            _buildStatItem(Icons.local_fire_department, Colors.orange, "$streak"),
-            _buildStatItem(Icons.diamond, Colors.blue, "$gems"),
-            _buildStatItem(Icons.flash_on, Colors.amber, "$xp"),
+            _buildStatItem(Icons.local_fire_department, Colors.orange, "${userController.streak}"),
+            _buildStatItem(Icons.diamond, Colors.blue, "${userController.gems}"),
+            _buildStatItem(Icons.favorite, Colors.red, "${userController.hearts}"),
           ],
-        ),
+        )),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(2),
           child: Container(color: Colors.grey[200], height: 2),
@@ -303,10 +320,10 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
   }
 
   Widget _buildLessonMap(List<dynamic> lessons) {
-    const double rowHeight = 130.0;
+    const double rowHeight = 150.0;
 
     return SizedBox(
-      height: lessons.length * rowHeight + 50,
+      height: lessons.length * rowHeight + 100,
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
@@ -440,7 +457,7 @@ class _LearnScreenState extends State<LearnScreen> with TickerProviderStateMixin
         if (isCurrent)
           Positioned(
             left: isLeft ? 100 : null,
-            right: isLeft ? null : 100,
+            right: isLeft ? null : 150,
             bottom: 25,
             child: Image.asset(
               'assets/images/LinhThuTini.gif',

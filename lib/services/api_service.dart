@@ -1,15 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:englishmaster/models/flashcard.dart';
-import '../models/api_response.dart';
+import 'package:englishmaster/models/flashcard.dart';import 'dart:io';import '../models/api_response.dart';
 import 'api_handler.dart';
 
 class ApiService {
-  // Chọn IP phù hợp:
-  // static const String baseUrl = 'http://localhost:1124/api'; // iOS Simulator
-  static const String baseUrl = 'http://10.0.2.2:1124/api'; // Android Emulator
-  // static const String baseUrl = 'http://192.168.1.x:1124/api'; // Máy thật
+  static const String baseUrl = 'http://10.0.2.2:1124/api';
 
   Future<Map<String, String>> _getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
@@ -20,7 +16,6 @@ class ApiService {
     };
   }
 
-  // --- AUTHENTICATION ---
   Future<ApiResponse<dynamic>> register(String name, String email, String password, String age) async {
     try {
       final response = await http.post(
@@ -108,8 +103,6 @@ class ApiService {
     await prefs.clear();
   }
 
-  // --- QUÊN MẬT KHẨU ---
-
   Future<dynamic> forgotPassword(String email) async {
     try {
       final response = await http.post(
@@ -122,9 +115,9 @@ class ApiService {
       if (response.statusCode == 200) {
         return body;
       }
-      return {'error': body['message'] ?? 'Không thể gửi mã xác nhận'};
+      throw Exception(body['message'] ?? 'Không thể gửi mã xác nhận');
     } catch (e) {
-      return {'error': e.toString()};
+      rethrow;
     }
   }
 
@@ -144,13 +137,12 @@ class ApiService {
       if (response.statusCode == 200) {
         return body;
       }
-      return {'error': body['message'] ?? 'Đặt lại mật khẩu thất bại'};
+      throw Exception(body['message'] ?? 'Đặt lại mật khẩu thất bại');
     } catch (e) {
-      return {'error': e.toString()};
+      rethrow;
     }
   }
 
-  // --- PROGRESS ---
   Future<ApiResponse<Map<String, dynamic>>> getUserProgress() async {
     try {
       final headers = await _getHeaders();
@@ -166,7 +158,30 @@ class ApiService {
     }
   }
 
-  // --- LUYỆN TẬP & KIỂM TRA ---
+  Future<ApiResponse<dynamic>> updateLessonProgress(String lessonId, {
+    required bool completed,
+    required int score,
+    int? correctAnswers,
+    int? totalQuestions,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.put(
+        Uri.parse('$baseUrl/progress/lessons/$lessonId'),
+        headers: headers,
+        body: jsonEncode({
+          'completed': completed,
+          'score': score,
+          'correctAnswers': correctAnswers,
+          'totalQuestions': totalQuestions,
+        }),
+      );
+      if (response.statusCode == 200) return ApiResponse.success(jsonDecode(response.body));
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
+    } catch (e) {
+      return ApiResponse.error(ApiHandler.handleException(e));
+    }
+  }
 
   Future<List<dynamic>> getPracticeExercises() async {
     try {
@@ -184,7 +199,6 @@ class ApiService {
     return [];
   }
 
-  // Lấy danh sách bài kiểm tra
   Future<List<dynamic>> getTests() async {
     try {
       final headers = await _getHeaders();
@@ -229,7 +243,6 @@ class ApiService {
     return null;
   }
 
-  // --- THÀNH TÍCH (ACHIEVEMENTS) ---
   Future<List<dynamic>> getAchievements() async {
     try {
       final headers = await _getHeaders();
@@ -244,7 +257,6 @@ class ApiService {
     return [];
   }
 
-  // --- XỬ LÝ DỮ LIỆU AN TOÀN (Helper) ---
   List<dynamic> _parseListResponse(dynamic responseBody) {
     if (responseBody is List) return responseBody;
     if (responseBody is Map) {
@@ -255,7 +267,6 @@ class ApiService {
     return [];
   }
 
-  // --- XẾP HẠNG (LEADERBOARD) ---
   Future<ApiResponse<List<dynamic>>> getLeaderboard() async {
     try {
       final headers = await _getHeaders();
@@ -279,7 +290,6 @@ class ApiService {
     }
   }
 
-  // --- CỬA HÀNG (SHOP) ---
   Future<List<dynamic>> getShopItems() async {
     try {
       final headers = await _getHeaders();
@@ -297,7 +307,7 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.post(
-          Uri.parse('$baseUrl/shop/buy'),
+          Uri.parse('$baseUrl/shop/purchase'),
           headers: headers,
           body: jsonEncode({'itemId': itemId})
       );
@@ -308,8 +318,6 @@ class ApiService {
     }
   }
 
-
-  // --- LESSONS ---
   Future<ApiResponse<List<dynamic>>> getLessons() async {
     try {
       final headers = await _getHeaders();
@@ -325,7 +333,6 @@ class ApiService {
     }
   }
 
-  // --- FLASHCARDS & PROFILE ---
   static String getValidImageUrl(String? url) {
     if (url == null || url.isEmpty) return "";
     if (!url.startsWith('http')) {
@@ -378,7 +385,35 @@ class ApiService {
     }
   }
 
-  // --- LESSON DETAILS ---
+  Future<ApiResponse<dynamic>> uploadAvatar(File imageFile) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      
+      if (token == null) {
+        return ApiResponse.error('Chưa đăng nhập');
+      }
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/users/avatar'),
+      );
+      
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('avatar', imageFile.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return ApiResponse.success(jsonDecode(response.body));
+      }
+      return ApiResponse.error(ApiHandler.getErrorMessage(response));
+    } catch (e) {
+      return ApiResponse.error(ApiHandler.handleException(e));
+    }
+  }
+
   Future<dynamic> getLessonById(String id) async {
     try {
       final headers = await _getHeaders();

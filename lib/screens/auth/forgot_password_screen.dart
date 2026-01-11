@@ -68,7 +68,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _apiService.forgotPassword(_emailController.text.trim());
+      print('📧 Gửi yêu cầu forgot password cho: ${_emailController.text.trim()}');
+      final result = await _apiService.forgotPassword(_emailController.text.trim());
+      print('✅ Kết quả: $result');
 
       if (!mounted) return;
       _showSnackBar('Mã xác nhận đã được gửi đến email!', Colors.green);
@@ -81,6 +83,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _startTimer();
 
     } catch (e) {
+      print('❌ Lỗi: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
       _showSnackBar('Lỗi: ${e.toString().replaceAll("Exception: ", "")}', Colors.red);

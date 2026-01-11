@@ -8,6 +8,8 @@ import 'package:englishmaster/services/api_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:get/get.dart';
+import 'package:englishmaster/controllers/user_controller.dart';
 
 class LessonScreen extends StatefulWidget {
   final String lessonId;
@@ -22,12 +24,12 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   final FlutterTts _flutterTts = FlutterTts();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final stt.SpeechToText _speech = stt.SpeechToText();
+  final UserController userController = Get.find<UserController>();
 
   // States
   bool _isLoading = true;
   List<dynamic> _questions = [];
   int _currentIndex = 0;
-  int _hearts = 5;
   double _progress = 0.0;
   bool _isChecked = false;
   bool _isCorrect = false;
@@ -343,7 +345,9 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       _isChecked = true;
       _isCorrect = correct;
       _showFeedback = true;
-      if (!correct) _hearts = (_hearts - 1).clamp(0, 5);
+      if (!correct) {
+        userController.decreaseHearts(1);
+      }
     });
 
     _playSound(correct);
@@ -377,6 +381,9 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   }
 
   void _showCompletionDialog() {
+    // Cập nhật progress lên server
+    _submitLessonProgress();
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -390,7 +397,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             const SizedBox(height: 20),
             const Text("Hoàn thành bài học!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.orange)),
             const SizedBox(height: 10),
-            Text("Bạn nhận được: $_hearts kinh nghiệm", style: const TextStyle(color: Colors.grey)),
+            Text("Bạn nhận được: ${userController.hearts} kinh nghiệm", style: const TextStyle(color: Colors.grey)),
           ],
         ),
         actions: [
@@ -411,6 +418,34 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         ],
       ),
     );
+  }
+
+  Future<void> _submitLessonProgress() async {
+    try {
+      final score = (_progress * 100).toInt();
+      final response = await _apiService.updateLessonProgress(
+        widget.lessonId,
+        completed: true,
+        score: score,
+        correctAnswers: (_currentIndex + 1), // Số câu đã làm
+        totalQuestions: _questions.length,
+      );
+      
+      // ✅ Cập nhật XP từ response
+      if (response.isSuccess && response.data?['data']?['xp'] != null) {
+        final newXP = response.data?['data']?['xp'];
+        final xpGained = response.data?['data']?['xpGained'] ?? 0;
+        
+        final userController = Get.find<UserController>();
+        userController.updateXP(newXP);
+        
+        if (xpGained > 0) {
+          print('🎯 Gained $xpGained XP! Total: $newXP');
+        }
+      }
+    } catch (e) {
+      print('Lỗi cập nhật progress: $e');
+    }
   }
 
   @override
@@ -443,7 +478,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             const SizedBox(width: 16),
             const Icon(Icons.favorite, color: Colors.red),
             const SizedBox(width: 4),
-            Text("$_hearts", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18)),
+            Obx(() => Text("${userController.hearts}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18))),
           ],
         ),
       ),
@@ -648,6 +683,49 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     return Row(children: [Expanded(child: Column(children: leftItems.map<Widget>((item) => _buildPairItem(item, true)).toList())), const SizedBox(width: 20), Expanded(child: Column(children: rightItems.map<Widget>((item) => _buildPairItem(item, false)).toList()))]);
   }
 
+  Widget _buildCorrectAnswerText(dynamic q) {
+    String correctAnswerText = '';
+
+    // 1. Dạng câu hỏi có lựa chọn (Vocabulary / Multiple Choice)
+    if (q['choices'] != null && (q['choices'] as List).isNotEmpty) {
+      try {
+        final choices = q['choices'] as List;
+
+        // Dùng vòng lặp For thay vì firstWhere để tránh lỗi null safety
+        for (var choice in choices) {
+          if (choice['id'].toString() == q['correctAnswer'].toString()) {
+            correctAnswerText = choice['text'];
+            break; // Tìm thấy rồi thì dừng lại
+          }
+        }
+      } catch (e) {
+        print("Lỗi tìm đáp án: $e");
+      }
+    }
+
+    // 2. Nếu vẫn chưa có đáp án (hoặc là dạng bài khác)
+    if (correctAnswerText.isEmpty) {
+      if (q['type'] == 'translate_build' && q['correctAnswer'] is List) {
+        correctAnswerText = (q['correctAnswer'] as List).join(' ');
+      } else if (q['correctAnswer'] != null) {
+        // Fallback cuối cùng: hiện nội dung gốc
+        correctAnswerText = q['correctAnswer'].toString();
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Text(
+        "Đáp án đúng: $correctAnswerText",
+        style: const TextStyle(
+            color: Color(0xFFEA2B2B),
+            fontSize: 16,
+            fontWeight: FontWeight.w500
+        ),
+      ),
+    );
+  }
+
   Widget _buildPairItem(dynamic item, bool isLeft) {
     String id = item['id'];
     bool isSelected = isLeft ? _selectedLeft == id : _selectedRight == id;
@@ -668,7 +746,10 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         _playSound(true);
       } else {
         _playSound(false);
-        Future.delayed(const Duration(milliseconds: 500), () { setState(() { _selectedLeft = null; _selectedRight = null; }); setState(() => _hearts = (_hearts - 1).clamp(0, 5)); });
+        Future.delayed(const Duration(milliseconds: 500), () { 
+          setState(() { _selectedLeft = null; _selectedRight = null; }); 
+          userController.decreaseHearts(1);
+        });
       }
     }
   }
@@ -697,8 +778,12 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_showFeedback) ...[
-            Row(children: [Icon(_isCorrect ? Icons.check_circle : Icons.cancel, color: titleColor, size: 30), const SizedBox(width: 10), Text(_isCorrect ? "Chính xác!" : "Chưa đúng!", style: TextStyle(color: titleColor, fontSize: 20, fontWeight: FontWeight.bold))]),
-            if (!_isCorrect && q['correctAnswer'] is String) Padding(padding: const EdgeInsets.only(top: 8.0), child: Text("Đáp án đúng: ${q['correctAnswer']}", style: const TextStyle(color: Color(0xFFEA2B2B), fontSize: 16))),
+            Row(children: [
+              Icon(_isCorrect ? Icons.check_circle : Icons.cancel, color: titleColor, size: 30),
+              const SizedBox(width: 10),
+              Text(_isCorrect ? "Chính xác!" : "Chưa đúng!", style: TextStyle(color: titleColor, fontSize: 20, fontWeight: FontWeight.bold))
+            ]),if (!_isCorrect) _buildCorrectAnswerText(q),
+
             const SizedBox(height: 16),
           ],
           SizedBox(

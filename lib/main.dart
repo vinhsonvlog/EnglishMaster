@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:englishmaster/config/colors.dart';
-import 'package:englishmaster/screens/auth/login_screen.dart'; // Bạn cần tạo file này
+import 'package:englishmaster/screens/auth/login_screen.dart';
 import 'package:englishmaster/screens/main_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:englishmaster/services/notification_service.dart'; // Import service vừa tạo
+import 'package:englishmaster/services/notification_service.dart';
+import 'package:englishmaster/controllers/user_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Khởi tạo Notification Service bằng Get.putAsync
+  // Khởi tạo Notification Service
   await Get.putAsync(() => NotificationService().init());
 
   runApp(const MyApp());
@@ -55,6 +56,12 @@ class _AuthCheckState extends State<AuthCheck> {
   _checkLoginStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
+    
+    if (token != null) {
+      // Khởi tạo UserController khi đã login
+      Get.put(UserController());
+    }
+    
     setState(() {
       _isLoggedIn = token != null;
       _isLoading = false;
