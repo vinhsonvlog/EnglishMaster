@@ -430,9 +430,8 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         correctAnswers: (_currentIndex + 1), // Số câu đã làm
         totalQuestions: _questions.length,
       );
-      
-      // ✅ Cập nhật XP từ response
-      if (response.isSuccess && response.data?['data']?['xp'] != null) {
+
+    if (response.success && response.data?['data']?['xp'] != null) {
         final newXP = response.data?['data']?['xp'];
         final xpGained = response.data?['data']?['xpGained'] ?? 0;
         
