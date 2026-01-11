@@ -39,6 +39,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   bool _isListening = false;
   String _spokenText = "";
   bool _speechAvailable = false;
+  double _soundLevel = 0.0; // ✅ Thêm để theo dõi âm lượng
 
   // Answers State
   String? _selectedOptionId;
@@ -153,36 +154,87 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
 
   // --- HÀM THU ÂM & TỰ ĐỘNG CHẤM ĐIỂM ---
   void _listen() async {
+    // Kiểm tra và yêu cầu quyền nếu chưa khởi tạo
     if (!_speechAvailable) {
       var status = await Permission.microphone.request();
       if (status != PermissionStatus.granted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cần quyền Micro để thu âm")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Cần quyền Micro để thu âm"),
+          backgroundColor: Colors.red,
+        ));
         return;
       }
-      bool available = await _speech.initialize();
-      if (mounted) setState(() => _speechAvailable = available);
+
+      // ✅ Khởi tạo lại với callbacks debug
+      bool available = await _speech.initialize(
+        onStatus: (status) {
+          print('🎤 Speech status: $status');
+          if (status == 'done' || status == 'notListening') {
+            if (mounted) setState(() => _isListening = false);
+          }
+        },
+        onError: (errorNotification) {
+          print('❌ Speech error: $errorNotification');
+          if (mounted) {
+            setState(() => _isListening = false);
+            // Hiển thị lỗi cho user
+            if (errorNotification.errorMsg == 'error_no_match') {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text("Không nghe thấy giọng nói. Hãy nói to và rõ hơn!"),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 2),
+              ));
+            }
+          }
+        },
+      );
+
+      if (mounted) {
+        setState(() => _speechAvailable = available);
+      }
+
+      // Nếu khởi tạo không thành công thì dừng
+      if (!available) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Không thể khởi tạo microphone"),
+          backgroundColor: Colors.red,
+        ));
+        return;
+      }
+
+      // Delay để đảm bảo initialization hoàn tất
+      await Future.delayed(const Duration(milliseconds: 300));
     }
 
     if (_isListening) {
+      // Dừng nghe
       _speech.stop();
       setState(() => _isListening = false);
+      print('🛑 Stopped listening');
     } else {
+      // Bắt đầu nghe
       setState(() {
         _isListening = true;
         _spokenText = "";
+        _soundLevel = 0.0;
       });
+
+      print('🎤 Starting to listen...');
 
       _speech.listen(
         onResult: (val) {
+          print('📝 Recognized: ${val.recognizedWords} (confidence: ${val.confidence})');
+
           setState(() {
             _spokenText = val.recognizedWords;
           });
 
           // ✅ TỰ ĐỘNG CHẤM KHI NGỪNG NÓI (finalResult = true)
-          if (val.finalResult) {
-            // Delay 0.5s để cập nhật UI rồi chấm
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (!_isChecked && _isListening) {
+          if (val.finalResult && val.recognizedWords.isNotEmpty) {
+            print('✅ Final result: ${val.recognizedWords}');
+            // Delay để hiển thị text trước khi chấm
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (!_isChecked && mounted) {
                 _speech.stop();
                 setState(() => _isListening = false);
                 _handleCheck(); // Gọi hàm kiểm tra ngay lập tức
@@ -190,11 +242,17 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             });
           }
         },
+        onSoundLevelChange: (level) {
+          // ✅ Theo dõi âm lượng để debug
+          setState(() => _soundLevel = level);
+          print('🔊 Sound level: $level');
+        },
         localeId: 'en_US',
-        listenFor: const Duration(seconds: 10),
-        pauseFor: const Duration(seconds: 2), // Ngừng nói 2 giây là chốt đơn
-        partialResults: true,
-        cancelOnError: true,
+        listenFor: const Duration(seconds: 30), // ✅ Tăng lên 30 giây
+        pauseFor: const Duration(seconds: 5), // ✅ Tăng lên 5 giây để có thời gian suy nghĩ
+        partialResults: true, // ✅ Hiển thị kết quả từng phần
+        cancelOnError: false, // ✅ Không hủy khi có lỗi nhỏ
+        listenMode: stt.ListenMode.confirmation, // ✅ Chế độ xác nhận
       );
     }
   }
@@ -431,13 +489,13 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         totalQuestions: _questions.length,
       );
 
-    if (response.success && response.data?['data']?['xp'] != null) {
+      if (response.success && response.data?['data']?['xp'] != null) {
         final newXP = response.data?['data']?['xp'];
         final xpGained = response.data?['data']?['xpGained'] ?? 0;
-        
+
         final userController = Get.find<UserController>();
         userController.updateXP(newXP);
-        
+
         if (xpGained > 0) {
           print('🎯 Gained $xpGained XP! Total: $newXP');
         }
@@ -555,62 +613,231 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     }
   }
 
-  // WIDGET SPEAKING
   Widget _buildSpeakingQuestion(dynamic q) {
+    // Calculate pronunciation score percentage if checked
+    double similarity = 0.0;
+    if (_isChecked && _spokenText.isNotEmpty) {
+      similarity = _calculateSimilarity(_spokenText, q['correctAnswer'].toString());
+    }
+    final int scorePercentage = (similarity * 100).round();
+    final bool passed = scorePercentage >= 50;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text("Nói câu này:", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey)),
-          const SizedBox(height: 16),
-
-
-
+          // ✅ Nút phát âm mẫu
           GestureDetector(
             onTap: () => _speak(q['correctAnswer'] ?? q['question']),
             child: Container(
-              width: 100, height: 100,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
                   color: Colors.blue,
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 15, spreadRadius: 5)]
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10, spreadRadius: 2)]
               ),
-              child: const Icon(Icons.volume_up, color: Colors.white, size: 50),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.volume_up, color: Colors.white, size: 60),
+                  SizedBox(width: 8),
+                  Text("", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 40),
 
+          // ✅ THÊM: Chỉ hiển thị MIC nếu CHƯA check
           if (!_isChecked)
             Column(
               children: [
                 GestureDetector(
                   onTap: _listen, // Bấm để bắt đầu nói và tự chấm
-                  child: Container(
-                    width: 80, height: 80,
-                    decoration: BoxDecoration(
-                        color: _isListening ? Colors.red : AppColors.primary,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: (_isListening ? Colors.red : AppColors.primary).withOpacity(0.4), blurRadius: 10, offset: const Offset(0,5))]
-                    ),
-                    child: Icon(_isListening ? Icons.mic_off : Icons.mic, color: Colors.white, size: 40),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // ✅ Vòng tròn animation khi đang nghe
+                      if (_isListening)
+                        Container(
+                          width: 140, height: 140,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.red.withOpacity(0.3), width: 3),
+                          ),
+                        ),
+                      // Nút mic chính
+                      Container(
+                        width: 100, height: 100,
+                        decoration: BoxDecoration(
+                            color: _isListening ? Colors.red : AppColors.primary,
+                            shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(color: (_isListening ? Colors.red : AppColors.primary).withOpacity(0.4), blurRadius: 15, spreadRadius: 5)]
+                        ),
+                        child: Icon(_isListening ? Icons.mic : Icons.mic_none, color: Colors.white, size: 48),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(_isListening ? "Đang nghe..." : "Bấm để nói", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                Text(
+                  _isListening ? "Đang nghe... Hãy nói rõ ràng!" : "Bấm để bắt đầu ghi âm",
+                  style: TextStyle(color: _isListening ? Colors.red : Colors.grey[600], fontSize: 16, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+
+                // --- ĐÃ XÓA: Thanh âm lượng và dòng chữ hiển thị lời nói thời gian thực tại đây ---
               ],
             ),
 
-          if (_spokenText.isNotEmpty)
+          // ✅ Kết quả sau khi chấm điểm - Giữ nguyên phần hiển thị kết quả
+          if (_isChecked && _spokenText.isNotEmpty)
             Container(
-              margin: const EdgeInsets.only(top: 20),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(top: 30),
+              padding: const EdgeInsets.all(24),
               width: double.infinity,
-              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[300]!)),
+              decoration: BoxDecoration(
+                  color: passed ? const Color(0xFFD7FFB8) : const Color(0xFFFFDFE0),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: passed ? AppColors.primary : Colors.red, width: 3),
+                  boxShadow: [BoxShadow(color: (passed ? AppColors.primary : Colors.red).withOpacity(0.2), blurRadius: 15, spreadRadius: 2)]
+              ),
               child: Column(
                 children: [
-                  const Text("Bạn đã nói:", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  const SizedBox(height: 4),
-                  Text(_spokenText, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87), textAlign: TextAlign.center),
+                  // Header với emoji và score
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        passed ? '🎉' : '😕',
+                        style: const TextStyle(fontSize: 48),
+                      ),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$scorePercentage%',
+                            style: TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: passed ? const Color(0xFF58A700) : const Color(0xFFEA2B2B)
+                            ),
+                          ),
+                          const Text(
+                            'Điểm phát âm',
+                            style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Progress bar cho score
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: scorePercentage / 100,
+                      minHeight: 12,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: AlwaysStoppedAnimation<Color>(passed ? AppColors.primary : Colors.red),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Text feedback
+                  Text(
+                    passed ? 'Tuyệt vời! Phát âm rất chuẩn!' : 'Cần luyện tập thêm nhé!',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: passed ? const Color(0xFF58A700) : const Color(0xFFEA2B2B)
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Transcription comparison
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Column(
+                      children: [
+                        // Bạn đã nói
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Bạn đã nói:",
+                              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _spokenText,
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: passed ? const Color(0xFF58A700) : const Color(0xFFEA2B2B)
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Divider(color: Colors.grey[300], thickness: 1),
+                        const SizedBox(height: 12),
+
+                        // Cần nói
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Cần nói:",
+                              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              q['correctAnswer'],
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF58A700)
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Tips for improvement nếu chưa đạt
+                  if (!passed) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange[200]!),
+                      ),
+                      child: Row(
+                        children: const [
+                          Text('💡', style: TextStyle(fontSize: 24)),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Mẹo cải thiện: Luyện tập phát âm từng từ một và chú ý trọng âm.',
+                              style: TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             )
@@ -619,7 +846,6 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     );
   }
 
-  // ... Các widget khác giữ nguyên
   Widget _buildVocabularyQuestion(dynamic q) {
     return GridView.count(
       crossAxisCount: 2,
@@ -745,8 +971,8 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         _playSound(true);
       } else {
         _playSound(false);
-        Future.delayed(const Duration(milliseconds: 500), () { 
-          setState(() { _selectedLeft = null; _selectedRight = null; }); 
+        Future.delayed(const Duration(milliseconds: 500), () {
+          setState(() { _selectedLeft = null; _selectedRight = null; });
           userController.decreaseHearts(1);
         });
       }
